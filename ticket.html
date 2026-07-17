@@ -13,6 +13,7 @@
             --text-dark: #222222;
             --text-gray: #666666;
             --border-color: #E2E8F0;
+            --error-red: #EF4444;
         }
 
         body {
@@ -23,7 +24,10 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            /* 텍스트 드래그 및 복사 차단 */
             -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             user-select: none;
         }
 
@@ -342,6 +346,7 @@
             border-radius: 6px;
             border: 1px solid #CBD5E1;
             box-sizing: border-box;
+            transition: all 0.3s ease;
         }
 
         .text-output-label {
@@ -358,6 +363,15 @@
             color: #334155;
             word-break: break-all;
             user-select: all;
+        }
+
+        /* 시간초과 시 난수 대체용 빨간색 에러 라벨 */
+        .expired-error-text {
+            color: var(--error-red);
+            font-weight: bold;
+            font-size: 11px;
+            text-align: center;
+            padding: 5px 0;
         }
 
         .timer-box {
@@ -377,9 +391,29 @@
             text-align: center;
             line-height: 1.4;
         }
+
+        /* 캡처 감지/방지 전용 가림막 (blur 시 작동) */
+        #screenshot-protector {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000000;
+            color: #FFFFFF;
+            z-index: 100000;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false" onselectstart="return false" ondragstart="return false">
+
+<div id="screenshot-protector">보안 정책으로 인하여 승차권 화면 캡처가 금지됩니다.</div>
 
 <div class="nav-bar">KORAIL 승차권 예매</div>
 
@@ -459,7 +493,7 @@
         </div>
         
         <div class="capture-warning">
-            ※ 보안을 위해 남은 시간이 지나면 QR코드가 자동으로 갱신됩니다.
+            ※ 보안을 위해 남은 시간이 지나면 난수가 만료되며 자동으로 갱신됩니다.
         </div>
     </div>
 </div>
@@ -702,7 +736,10 @@
             correctLevel : QRCode.CorrectLevel.M
         });
 
-        document.getElementById("text-output-data").innerText = encryptedData;
+        // 정상 발생 시 복사 텍스트 활성화
+        const textOutput = document.getElementById("text-output-data");
+        textOutput.innerHTML = encryptedData;
+        textOutput.className = "text-output-value";
 
         timeLeft = 30;
         document.getElementById('timer-display').innerText = `남은 시간: ${timeLeft}초`;
@@ -712,13 +749,22 @@
         timerInterval = setInterval(() => {
             timeLeft--;
             
-            // [핵심 기능] 시간이 줄어들 때마다 '징~' 하고 짧은 진동 발생
+            // 실시간 짧은 진동 피드백
             if (navigator.vibrate) {
-                navigator.vibrate(80); // 80밀리초 동안 가볍고 직관적인 진동
+                navigator.vibrate(80);
             }
 
             if (timeLeft <= 0) {
-                updateQRAndTimer();
+                // [보안 수정] 30초 유효시간이 끝나면 난수값을 화면에서 지웁니다.
+                clearInterval(timerInterval);
+                document.getElementById('timer-display').innerText = "보안 유효 시간 만료 (0초)";
+                document.getElementById('timer-display').style.color = "var(--error-red)";
+                
+                // 난수 컨테이너 내용물 숨기기 및 오류 경고 텍스트 삽입
+                textOutput.innerHTML = `<div class="expired-error-text">⚠️ 보안 시간이 만료되었습니다.<br>스마트 티켓을 닫고 다시 발행해 주세요.</div>`;
+                
+                // 만료 상태에서는 QR코드 영역도 공백 처리하여 오접근 차단
+                qrBox.innerHTML = `<div style="color:var(--error-red); font-weight:bold; font-size:13px; text-align:center; padding:50px 0;">시간 만료<br>티켓 재발행 필요</div>`;
             } else {
                 document.getElementById('timer-display').innerText = `남은 시간: ${timeLeft}초`;
                 if(timeLeft <= 5) {
@@ -739,6 +785,32 @@
         changeCabin(1);
         currentTicketData = null;
     }
+
+    // --- 캡처 및 시스템 조작 우회 차단 보안 스크립트 ---
+    
+    // 1) 화면 포커스가 해제될 때(멀티태스킹 탭 이동, 스크린샷 툴 실행 등) 화면 강제 블랙 처리
+    window.addEventListener('blur', function() {
+        document.getElementById('screenshot-protector').style.display = 'flex';
+    });
+
+    window.addEventListener('focus', function() {
+        document.getElementById('screenshot-protector').style.display = 'none';
+    });
+
+    // 2) 키보드를 이용한 OS 캡처 및 조작 단축키 원천 무력화
+    window.addEventListener('keydown', function(e) {
+        const prohibitedKeys = ['F12', 'PrintScreen'];
+        
+        if (
+            prohibitedKeys.includes(e.key) || 
+            (e.ctrlKey && e.shiftKey && e.key === 'I') || // 개발자 도구 단축키
+            (e.ctrlKey && e.key === 's') ||                // 페이지 저장 단축키
+            (e.ctrlKey && e.key === 'c')                  // 수동 텍스트 복사 차단
+        ) {
+            e.preventDefault();
+            return false;
+        }
+    });
 
     window.onload = function() {
         renderCabin();
