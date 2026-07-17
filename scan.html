@@ -137,7 +137,7 @@
         }
 
         @keyframes spin {
-            0 { transform: rotate(0deg); }
+            0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
@@ -148,7 +148,6 @@
             text-align: center;
         }
 
-        /* 상세 정보 카드 (성공시에만 노출) */
         .info-card {
             background-color: #1F2937;
             border: 1px solid var(--border-color);
@@ -160,7 +159,6 @@
             box-sizing: border-box;
         }
 
-        /* 오류 메세지 단독 표시용 상자 (실패시에만 노출) */
         .error-message-box {
             display: none;
             color: var(--error-red);
@@ -306,7 +304,7 @@
             오류 원인이 표시됩니다.
         </div>
 
-        <div class="auto-close-timer" id="timer-text">5초 후 스캐너로 복귀합니다...</div>
+        <div class="auto-close-timer" id="timer-text">3초 후 스캐너로 복귀합니다...</div>
     </div>
 </div>
 
@@ -317,10 +315,10 @@
     let autoCloseTimeout = null;
     let autoCloseInterval = null;
     
-    // [중요] 연속 스캔 중복 제어용 플래그
+    // 검증 제어 플래그 (중복 스캔 방지용)
     let isProcessing = false;
 
-    // [중복 방지] 승차 처리 완료 티켓 저장소
+    // 승차 처리 완료 티켓 저장소
     const usedTickets = new Set();
 
     function initAudio() {
@@ -353,20 +351,21 @@
         });
     }
 
-    // 1. QR코드 스캔 성공 시 핸들러 수정
+    // QR코드 감지 성공 핸들러
     function onScanSuccess(decodedText) {
-        if (isProcessing) return; // 이미 처리 중이면 연속된 입력은 완전히 무시
+        // [중요] 이미 검증 프로세스 중(isProcessing = true)이라면 추가 인식을 원천 차단
+        if (isProcessing) return; 
         
-        isProcessing = true; // 플래그 락(Lock)
+        isProcessing = true; // 스캔 제어 플래그 Lock 🔐
         
-        // 카메라 스캔 일시정지 (스캔 기능 물리적 정지)
+        // 카메라 스캐너 작동 일시중지 (물리적 차단)
         if (html5QrcodeScanner) {
             html5QrcodeScanner.pause(true);
         }
 
         clearAllTimers();
 
-        // [요청 사항] 인식을 확실히 인지할 수 있도록 1초(1000ms)의 대기 딜레이를 부여한 후 처리
+        // 인식 후 1초 대기 딜레이 구현
         setTimeout(() => {
             processVerification(decodedText);
         }, 1000);
@@ -390,13 +389,12 @@
 
         clearAllTimers();
         
-        // 수동 검증도 일치된 흐름을 위해 1초 딜레이 적용
         setTimeout(() => {
             processVerification(inputData);
         }, 1000);
     }
 
-    // 1500Hz 방형파 재생기
+    // 1500Hz 방형파 사운드 플레이어 (볼륨 0.6)
     function playSharpBeep(frequency, duration) {
         try {
             initAudio();
@@ -411,7 +409,6 @@
             osc.frequency.setValueAtTime(frequency, audioCtx.currentTime); 
             osc.type = "square"; 
             
-            // 크고 날카로운 소리를 위한 볼륨 조정
             gainNode.gain.setValueAtTime(0.6, audioCtx.currentTime); 
             gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
             
@@ -422,12 +419,12 @@
         }
     }
 
-    // 정상: 초고음 방형파 1500Hz "띡" (1회)
+    // 성공: 1500Hz "띡" (1회)
     function playSuccessBeep() {
         playSharpBeep(1500, 0.08);
     }
 
-    // 실패: 동일 주파수 1500Hz 고속 2연타 "띡띡" (2회)
+    // 실패: 1500Hz 고속 연타 "띡띡" (2회)
     function playErrorBeep() {
         playSharpBeep(1500, 0.07);
         setTimeout(() => playSharpBeep(1500, 0.07), 110);
@@ -447,7 +444,7 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
-        // 분석 애니메이션 딜레이
+        // 티켓 분석 애니메이션 대기 딜레이
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
@@ -456,7 +453,7 @@
             const errorCard = document.getElementById('error-card');
 
             try {
-                // 중복 사용 제어
+                // 중복 사용 검증
                 if (usedTickets.has(encryptedInput)) {
                     showErrorResult("이미 사용 처리된 승차권입니다.");
                     startAutoCloseTimer();
@@ -481,9 +478,9 @@
                     return;
                 }
 
-                // [검증 정상]
+                // [정상 인식 완료]
                 playSuccessBeep();
-                usedTickets.add(encryptedInput); // 사용 완료 목록 등록
+                usedTickets.add(encryptedInput); 
 
                 successCard.style.display = "block";
                 errorCard.style.display = "none";
@@ -500,19 +497,17 @@
                 showErrorResult("조회 불가 (유효하지 않은 QR코드)");
             }
 
-            // 공통 5초 타이머 시작
+            // 결과 노출 후 자동으로 돌아가는 타이머 호출 (3초)
             startAutoCloseTimer();
         }, 600); 
     }
 
-    // 오류 발생 화면 세팅 함수 (카드 삭제 및 띡띡 소리)
     function showErrorResult(errorMessage) {
-        playErrorBeep(); // 방형파 1500Hz 2회 출력
+        playErrorBeep(); 
 
         const successCard = document.getElementById('success-card');
         const errorCard = document.getElementById('error-card');
 
-        // 레이아웃 스위칭
         successCard.style.display = "none";
         errorCard.style.display = "block";
         errorCard.innerText = errorMessage;
@@ -521,10 +516,11 @@
         document.getElementById('result-title').style.color = "var(--error-red)";
     }
 
+    // [수정] 3초 카운트다운 타이머 정의
     function startAutoCloseTimer() {
         clearAllTimers();
         
-        let remainingSeconds = 5;
+        let remainingSeconds = 3; // 3초로 딜레이 설정 변경
         document.getElementById('timer-text').innerText = `${remainingSeconds}초 후 스캐너로 복귀합니다...`;
 
         autoCloseInterval = setInterval(() => {
@@ -533,19 +529,20 @@
         }, 1000);
 
         autoCloseTimeout = setTimeout(() => {
-            resetScanner();
-        }, 5000);
+            resetScanner(); // 3초 완료 시 스캐너 리셋 및 재작동
+        }, 3000);
     }
 
+    // 결과 창을 닫고 카메라 스캐너를 완전히 초기화하는 함수
     function resetScanner() {
         clearAllTimers();
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('test-qr-data').value = '';
         
-        // 처리 플래그 잠금 해제 및 카메라 스캔 재시작
-        isProcessing = false;
+        // 결과 확인창이 내려가서 화면 복귀가 끝난 시점에 비로소 락 해제 및 재시작
+        isProcessing = false; // 플래그 Unlock 🔓
         if (html5QrcodeScanner) {
-            html5QrcodeScanner.resume();
+            html5QrcodeScanner.resume(); // 카메라 스캔 기능 다시 시작
         }
     }
 
