@@ -76,7 +76,6 @@
             object-fit: cover;
         }
 
-        /* 모서리 가이드 (빨간선 제거됨) */
         .corner {
             position: absolute;
             width: 24px;
@@ -285,7 +284,13 @@
 
 <script>
     const SECRET_KEY = "KorailSecuritySystemKey2026";
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioCtx = null;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
 
     async function initCamera() {
         const video = document.getElementById('camera-preview');
@@ -301,16 +306,22 @@
     }
 
     function playBeep(frequency, duration) {
-        if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.frequency.value = frequency;
-        osc.type = "sine";
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
+        try {
+            initAudio();
+            if (!audioCtx || audioCtx.state === 'suspended') return;
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = frequency;
+            osc.type = "sine";
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch (e) {
+            console.warn("오디오 출력 제한됨 (화면 미작동)", e);
+        }
     }
 
     function playErrorBeep() {
@@ -320,6 +331,9 @@
     }
 
     function triggerTestScan(isNormalMode) {
+        // 버튼 터치 즉시 오디오 제한 해제 시도
+        try { initAudio(); if(audioCtx) audioCtx.resume(); } catch(e){}
+
         const encryptedInput = document.getElementById('test-qr-data').value.trim();
 
         if (isNormalMode && !encryptedInput) {
@@ -337,17 +351,18 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
+        // 3초 로딩 대기 시뮬레이션
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
 
             if (isNormalMode) {
                 try {
-                    // 순수 AES 해독 시도
+                    // 복호화 시도
                     const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
                     const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
 
-                    if (!decryptedText) throw new Error("복호화 에러");
+                    if (!decryptedText) throw new Error("복호화 실패");
 
                     const [name, route, seat, timestamp] = decryptedText.split('|');
                     
@@ -355,7 +370,8 @@
                     const now = Date.now();
                     const diffSeconds = Math.floor((now - issuedTime) / 1000);
 
-                    // 30초 유효시간 체크
+                    // [정확히 30초 검증 적용]
+                    // (티켓이 새로 갱신되는 주기인 30초를 초과한 티켓이면 위조 처리)
                     if (diffSeconds > 30 || diffSeconds < -30) {
                         triggerErrorScreen("보안 시간 만료 (30초 초과)");
                         return;
