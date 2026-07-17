@@ -110,7 +110,6 @@
             box-sizing: border-box;
         }
 
-        /* 닫기 X 버튼 스타일 */
         .close-overlay-btn {
             position: absolute;
             top: 20px;
@@ -233,7 +232,7 @@
 </head>
 <body>
 
-<div class="audio-guide-banner" id="audio-banner">⚠️ 소리가 안 나면 화면 아무 곳이나 한 번 터치해 주세요!</div>
+<div class="audio-guide-banner" id="audio-banner">⚠️ 소리가 작동하지 않으면 화면을 가볍게 한 번 터치해 주세요!</div>
 <div class="header">검표원 QR 스캐너</div>
 
 <div class="scanner-container">
@@ -296,7 +295,10 @@
     let autoCloseTimeout = null;
     let autoCloseInterval = null;
 
-    // 브라우저 소리 재생 제약 해제 유틸
+    // [중복 방지] 이미 승차에 사용 완료된 토큰들을 기록하는 Set 객체
+    const usedTickets = new Set();
+
+    // 오디오 컨텍스트 초기화 및 잠금 해제
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -306,10 +308,10 @@
         }
     }
 
-    // 화면 터치 시 브라우저 오디오 차단 해제 바인딩
+    // 터치 시 오디오 강제 연동
     document.body.addEventListener('click', function() {
         initAudio();
-        document.getElementById('audio-banner').style.display = 'none'; // 한 번 터치하면 안내 배너 제거
+        document.getElementById('audio-banner').style.display = 'none';
     }, { once: false });
 
     function startCameraScanner() {
@@ -324,18 +326,17 @@
             config,
             onScanSuccess
         ).catch(err => {
-            console.warn("카메라 구동 실패 (수동 텍스트 검증을 활용하세요)", err);
+            console.warn("카메라 연동에 실패했습니다.", err);
         });
     }
 
-    // 카메라 인식 즉시 반응
+    // 카메라 즉시 자동 인식
     function onScanSuccess(decodedText) {
-        // [수정 사항] 정보가 표시되고 있는 도중이라도 즉시 새 QR 코드로 업데이트
         clearAllTimers();
         processVerification(decodedText);
     }
 
-    // 수동 검증 버튼 실행
+    // 검증 버튼 클릭 연동
     function handleManualVerify() {
         initAudio();
         const inputData = document.getElementById('test-qr-data').value.trim();
@@ -347,42 +348,51 @@
         processVerification(inputData);
     }
 
+    // 명확한 소리를 내기 위해 웹 오디오 API 소스 구현 개선
     function playBeep(frequency, duration) {
         try {
             initAudio();
             if (!audioCtx) return;
             
             const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            const gainNode = audioCtx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            // 주파수를 1000Hz로 상향 조정 (띡 소리 유도)
             osc.frequency.value = frequency;
             osc.type = "sine";
-            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            
+            // 즉각적인 볼륨 확보 및 페이드아웃으로 명확한 타격음 생성
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         } catch (e) {
-            console.warn("오디오 출력 제약", e);
+            console.warn("오디오 플레이 실패", e);
         }
     }
 
+    // 마트 바코드 인식음 - 띡 (높고 명확한 1000Hz)
     function playSuccessBeep() {
-        playBeep(980, 0.25);
+        playBeep(1000, 0.1);
     }
 
+    // 마트 오류음 - 띡띡띡 (동일 주파수 1000Hz 고속 3연타)
     function playErrorBeep() {
-        playBeep(450, 0.12);
-        setTimeout(() => playBeep(450, 0.12), 180);
-        setTimeout(() => playBeep(400, 0.25), 360);
+        playBeep(1000, 0.08);
+        setTimeout(() => playBeep(1000, 0.08), 120);
+        setTimeout(() => playBeep(1000, 0.08), 240);
     }
 
-    // 모든 대기 타이머 일괄 초기화 함수
     function clearAllTimers() {
         if (autoCloseTimeout) clearTimeout(autoCloseTimeout);
         if (autoCloseInterval) clearInterval(autoCloseInterval);
     }
 
-    // 검증 메인 프로세스
+    // 승차권 조회 검증
     function processVerification(encryptedInput) {
         const overlay = document.getElementById('overlay');
         const loadingView = document.getElementById('loading-view');
@@ -392,16 +402,22 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
-        // 분석 딜레이 연출 후 해독 결과 반영
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
 
             try {
+                // [재사용 방지 체크]
+                if (usedTickets.has(encryptedInput)) {
+                    showErrorResult("이미 사용된 승차권 (재사용 불가)");
+                    startAutoCloseTimer(); // 오류가 뜨더라도 5초 후 복귀 자동 시작
+                    return;
+                }
+
                 const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
                 const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
 
-                if (!decryptedText) throw new Error("복호화 에러");
+                if (!decryptedText) throw new Error("위조 에러");
 
                 const [name, route, seat, timestamp] = decryptedText.split('|');
                 
@@ -409,14 +425,17 @@
                 const now = Date.now();
                 const diffSeconds = Math.floor((now - issuedTime) / 1000);
 
-                // 엄격한 30초 한계 조건 적용
+                // 엄격한 30초 조건 확인
                 if (diffSeconds > 30 || diffSeconds < -30) {
                     showErrorResult("보안 시간 만료 (30초 초과)");
+                    startAutoCloseTimer();
                     return;
                 }
 
-                // 정상 처리
+                // 정상 판정 및 성공 시 재사용 블랙리스트 등록
                 playSuccessBeep();
+                usedTickets.add(encryptedInput); // 사용 완료 리스트에 원본 등록
+
                 document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
                 document.getElementById('result-title').style.color = "var(--success-green)";
                 document.getElementById('res-name').innerText = name;
@@ -425,12 +444,12 @@
                 document.getElementById('res-time').innerText = new Date(issuedTime).toLocaleString();
 
             } catch (e) {
-                // 비정상 처리
                 showErrorResult("위조되거나 변조된 잘못된 QR코드");
             }
 
+            // 정상, 위조 구분 없이 모든 상황에서 5초 카운트다운 적용
             startAutoCloseTimer();
-        }, 1000); // 1초 뒤 연산 표출
+        }, 800); 
     }
 
     function showErrorResult(errorMessage) {
@@ -443,7 +462,7 @@
         document.getElementById('res-time').innerText = "기록 없음";
     }
 
-    // 5초 자동 스캐너 복구 타이머
+    // 5초 자동 복귀 타이머 제어 함수
     function startAutoCloseTimer() {
         clearAllTimers();
         
@@ -460,7 +479,6 @@
         }, 5000);
     }
 
-    // 화면 초기화 및 복귀
     function resetScanner() {
         clearAllTimers();
         document.getElementById('overlay').style.display = 'none';
