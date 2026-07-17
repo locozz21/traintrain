@@ -40,7 +40,6 @@
             z-index: 10;
         }
 
-        /* QR 스캐너 뷰포트 영역 */
         .scanner-container {
             flex: 1;
             display: flex;
@@ -60,7 +59,6 @@
             z-index: 10;
         }
 
-        /* QR 인식 영역 및 실제 카메라 화면이 띄워지는 컨테이너 */
         .qr-window {
             position: relative;
             width: 250px;
@@ -72,14 +70,13 @@
             overflow: hidden;
         }
 
-        /* [실제 카메라 비디오 태그] */
         #camera-preview {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
 
-        /* 테두리 모서리 강조 표시 (ㄱ, ㄴ, ㄷ, ㄹ) */
+        /* 모서리 가이드 (빨간선 제거됨) */
         .corner {
             position: absolute;
             width: 24px;
@@ -92,25 +89,24 @@
         .top-left {
             top: -2px;
             left: -2px;
-            border-width: 4px 0 0 4px; /* ㄱ */
+            border-width: 4px 0 0 4px;
         }
         .top-right {
             top: -2px;
             right: -2px;
-            border-width: 4px 4px 0 0; /* ㄲ */
+            border-width: 4px 4px 0 0;
         }
         .bottom-left {
             bottom: -2px;
             left: -2px;
-            border-width: 0 0 4px 4px; /* ㄴ */
+            border-width: 0 0 4px 4px;
         }
         .bottom-right {
             bottom: -2px;
             right: -2px;
-            border-width: 0 4px 4px 0; /* ┘ */
+            border-width: 0 4px 4px 0;
         }
 
-        /* 통합 진행상황/결과 노출 오버레이 레이어 */
         .status-overlay {
             display: none;
             position: fixed;
@@ -127,7 +123,6 @@
             box-sizing: border-box;
         }
 
-        /* 로딩 동그라미 스피너 */
         .spinner {
             width: 60px;
             height: 60px;
@@ -150,7 +145,6 @@
             text-align: center;
         }
 
-        /* 결과 정보창 디자인 */
         .info-card {
             background-color: #1F2937;
             border: 1px solid var(--border-color);
@@ -195,7 +189,6 @@
             cursor: pointer;
         }
 
-        /* 가상 테스트용 하단 입력 창 */
         .test-panel {
             width: 100%;
             max-width: 420px;
@@ -251,9 +244,9 @@
 </div>
 
 <div class="test-panel">
-    <input type="text" class="test-input" id="test-qr-data" placeholder="여기에 스마트폰에 노출된 암호문 값을 붙여넣으세요">
+    <input type="text" class="test-input" id="test-qr-data" placeholder="암호화된 문자열을 복사해 이곳에 입력하세요">
     <div>
-        <button class="test-btn" onclick="triggerTestScan(true)">가상 인식 시도</button>
+        <button class="test-btn" onclick="triggerTestScan(true)">가상 인식 시도 (해독하기)</button>
         <button class="test-btn" style="background-color: #7F1D1D;" onclick="triggerTestScan(false)">오류 티켓 강제 테스트</button>
     </div>
 </div>
@@ -261,11 +254,11 @@
 <div class="status-overlay" id="overlay">
     <div id="loading-view" style="display: flex; flex-direction: column; align-items: center;">
         <div class="spinner"></div>
-        <div class="status-title">QR코드를 해석하여 정보를 조회 중입니다...</div>
+        <div class="status-title">안전한 채널을 통해 조회 중입니다...</div>
     </div>
 
     <div id="result-view" style="display: none; width: 100%; flex-direction: column; align-items: center;">
-        <div class="status-title" id="result-title">정상입니다</div>
+        <div class="status-title" id="result-title">정상 승차권</div>
         
         <div class="info-card">
             <div class="info-row">
@@ -294,23 +287,19 @@
     const SECRET_KEY = "KorailSecuritySystemKey2026";
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // 스마트폰 카메라 구동 기능 활성화
     async function initCamera() {
         const video = document.getElementById('camera-preview');
         try {
-            // 후면 카메라 우선 활성화 조건 설정
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment" },
                 audio: false
             });
             video.srcObject = stream;
         } catch (err) {
-            console.warn("카메라 장치를 시작할 수 없습니다. 가상 테스트 모드는 정상 작동합니다.", err);
-            // 브라우저가 보안상(https가 아닌 localhost/http 환경 등) 거부했거나 카메라가 없는 환경일 때의 대응
+            console.warn("카메라 장치 권한 없음 (로컬 테스트 환경)", err);
         }
     }
 
-    // 단일 비프음 (삑) 재생 함수
     function playBeep(frequency, duration) {
         if (!audioCtx) return;
         const osc = audioCtx.createOscillator();
@@ -324,26 +313,22 @@
         osc.stop(audioCtx.currentTime + duration);
     }
 
-    // 에러 비프음 (삑삑삑) 재생 함수
     function playErrorBeep() {
         playBeep(450, 0.12);
         setTimeout(() => playBeep(450, 0.12), 200);
         setTimeout(() => playBeep(400, 0.25), 400);
     }
 
-    // 가상 QR 리딩 트리거 함수
     function triggerTestScan(isNormalMode) {
         const encryptedInput = document.getElementById('test-qr-data').value.trim();
 
         if (isNormalMode && !encryptedInput) {
-            alert("티켓 화면(ticket.html)에서 생성된 QR 복사값 혹은 암호문 텍스트를 입력해 주세요.");
+            alert("ticket.html에서 노출된 암호화 텍스트(예: U2FsdGVk...)를 복사해 넣어주세요.");
             return;
         }
 
-        // 1. 인식 성공음 (삑) 출력
         playBeep(980, 0.15);
 
-        // 2. 오버레이를 열고 조회중... 로딩 모드 활성화
         const overlay = document.getElementById('overlay');
         const loadingView = document.getElementById('loading-view');
         const resultView = document.getElementById('result-view');
@@ -352,17 +337,17 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
-        // 3. 3초간 조회 대기 시작
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
 
             if (isNormalMode) {
                 try {
+                    // 순수 AES 해독 시도
                     const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
                     const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
 
-                    if (!decryptedText) throw new Error("복호화 정보 실패");
+                    if (!decryptedText) throw new Error("복호화 에러");
 
                     const [name, route, seat, timestamp] = decryptedText.split('|');
                     
@@ -370,13 +355,12 @@
                     const now = Date.now();
                     const diffSeconds = Math.floor((now - issuedTime) / 1000);
 
-                    // 보안상 30초 유효 시간 초과 판단
+                    // 30초 유효시간 체크
                     if (diffSeconds > 30 || diffSeconds < -30) {
-                        triggerErrorScreen("보안 시간 만료 (30초 만료된 QR)");
+                        triggerErrorScreen("보안 시간 만료 (30초 초과)");
                         return;
                     }
 
-                    // 모든 유효성 검증 성공
                     document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
                     document.getElementById('result-title').style.color = "var(--success-green)";
                     document.getElementById('res-name').innerText = name;
@@ -390,7 +374,7 @@
             } else {
                 triggerErrorScreen("잘못된 승차권 정보");
             }
-        }, 3000); // 3초 조회 대기 로직 적용
+        }, 3000);
     }
 
     function triggerErrorScreen(errorMessage) {
@@ -409,7 +393,6 @@
         document.getElementById('test-qr-data').value = '';
     }
 
-    // 페이지 시작과 동시에 카메라 초기 구동 시도
     window.onload = function() {
         initCamera();
     };
