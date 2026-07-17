@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KORAIL - 승무원 검수 단말기</title>
+    <title>KORAIL - 승차권 검표 시스템</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root {
             --korail-blue: #0054A6;
-            --korail-green: #1F873C;
-            --korail-red: #E71E2D;
             --bg-dark: #111827;
-            --card-bg: #FFFFFF;
+            --border-color: #374151;
+            --success-green: #10B981;
+            --error-red: #EF4444;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", sans-serif;
             background-color: var(--bg-dark);
             color: #FFFFFF;
             margin: 0;
@@ -24,267 +23,387 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
+            height: 100vh;
             overflow: hidden;
-        }
-
-        #reader span, #reader a, #reader div:not([id]) {
-            display: none !important;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .header {
             width: 100%;
-            background-color: #030712;
-            padding: 18px 0;
+            padding: 15px 0;
             text-align: center;
             font-weight: bold;
-            font-size: 16px;
-            border-bottom: 2px solid var(--korail-blue);
-            z-index: 10;
+            font-size: 18px;
+            background-color: #1F2937;
+            border-bottom: 1px solid var(--border-color);
         }
 
+        /* QR 스캐너 뷰포트 영역 */
         .scanner-container {
-            width: 100%;
-            max-width: 420px;
-            padding: 20px;
-            box-sizing: border-box;
+            flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            flex: 1;
             justify-content: center;
-        }
-
-        .camera-box {
+            align-items: center;
             position: relative;
             width: 100%;
-            aspect-ratio: 1 / 1;
-            background-color: #000000;
-            border-radius: 16px;
-            overflow: hidden;
-            border: 3px solid #374151;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-width: 420px;
         }
 
-        #reader {
-            width: 100% !important;
-            height: 100% !important;
-        }
-        #reader video {
-            object-fit: cover !important;
-        }
-
-        .loading-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+        .scan-helper-text {
             font-size: 14px;
             color: #9CA3AF;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* QR 인식 사각 틀 */
+        .qr-window {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background-color: rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+        }
+
+        /* [핵심] QR 테두리 모서리 강조 표시 (ㄱ, ㄴ, ㄷ, ㄹ) */
+        .corner {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-color: var(--korail-blue);
+            border-style: solid;
             pointer-events: none;
-            z-index: 1;
+        }
+        .top-left {
+            top: -2px;
+            left: -2px;
+            border-width: 4px 0 0 4px; /* ㄱ */
+        }
+        .top-right {
+            top: -2px;
+            right: -2px;
+            border-width: 4px 4px 0 0; /* ㄲ */
+        }
+        .bottom-left {
+            bottom: -2px;
+            left: -2px;
+            border-width: 0 0 4px 4px; /* ㄴ */
+        }
+        .bottom-right {
+            bottom: -2px;
+            right: -2px;
+            border-width: 0 4px 4px 0; /* ┘ */
         }
 
-        .verified-card {
+        /* 빨간색 가이드 레이저 라인 애니메이션 */
+        .laser-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background-color: #E71E2D;
+            box-shadow: 0 0 10px #E71E2D;
+            top: 0;
+            animation: scanning 2.5s infinite linear;
+        }
+
+        @keyframes scanning {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        /* 팝업 오버레이 (조회 중, 결과창 통합 사용) */
+        .status-overlay {
             display: none;
             position: fixed;
-            bottom: 30px;
-            left: 5%;
-            width: 90%;
-            max-width: 380px;
-            background-color: var(--card-bg);
-            color: #333333;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-            border: 2px solid var(--korail-green);
-            overflow: hidden;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(17, 24, 39, 0.95);
             z-index: 1000;
-        }
-
-        .invalid-card {
-            display: none;
-            position: fixed;
-            bottom: 30px;
-            left: 5%;
-            width: 90%;
-            max-width: 380px;
-            background-color: var(--card-bg);
-            color: #333333;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-            border: 2px solid var(--korail-red);
-            overflow: hidden;
-            z-index: 1000;
-        }
-
-        .card-banner {
-            background-color: var(--korail-green);
-            color: #FFFFFF;
-            padding: 14px;
-            font-weight: bold;
-            font-size: 15px;
-            text-align: center;
-        }
-
-        .card-banner.danger {
-            background-color: var(--korail-red);
-        }
-
-        .card-body {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
+            box-sizing: border-box;
         }
 
-        .route-display {
-            font-size: 24px;
-            font-weight: 800;
-            text-align: center;
+        /* 로딩 동그라미 스피너 */
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--korail-blue);
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-title {
+            font-size: 22px;
+            font-weight: bold;
             margin-bottom: 15px;
-            color: #111111;
-            border-bottom: 1px solid #E2E8F0;
-            padding-bottom: 12px;
+            text-align: center;
         }
 
-        .detail-row {
+        /* 결과 정보창 디자인 */
+        .info-card {
+            background-color: #1F2937;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            width: 100%;
+            max-width: 320px;
+            margin-bottom: 25px;
+            box-sizing: border-box;
+        }
+
+        .info-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             font-size: 15px;
         }
 
-        .detail-label {
-            color: #777777;
-            font-weight: 500;
+        .info-row:last-child {
+            margin-bottom: 0;
         }
 
-        .detail-value {
-            color: #111111;
+        .info-label {
+            color: #9CA3AF;
+        }
+
+        .info-value {
             font-weight: bold;
+            color: #FFFFFF;
         }
 
-        .btn-reset {
+        .btn-confirm {
             width: 100%;
-            padding: 14px;
+            max-width: 320px;
+            padding: 15px;
             background-color: var(--korail-blue);
             color: #FFFFFF;
             border: none;
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            margin-top: 15px;
+        }
+
+        /* 가상 테스트용 하단 입력 창 */
+        .test-panel {
+            width: 100%;
+            max-width: 420px;
+            background-color: #1F2937;
+            padding: 15px;
+            box-sizing: border-box;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .test-input {
+            width: calc(100% - 30px);
+            padding: 10px;
+            background-color: #111827;
+            border: 1px solid var(--border-color);
+            color: #FFFFFF;
+            font-size: 12px;
+            outline: none;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        .test-btn {
+            background-color: #374151;
+            color: #FFFFFF;
+            border: none;
+            padding: 8px 15px;
+            font-size: 13px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-btn:hover {
+            background-color: var(--korail-blue);
         }
     </style>
 </head>
 <body>
 
-<div class="header">KORAIL 승무원 휴대용 검수기</div>
+<div class="header">검표원 QR 스캐너</div>
 
 <div class="scanner-container">
-    <div class="camera-box">
-        <div class="loading-text" id="loading">카메라 초기화 중...</div>
-        <div id="reader"></div>
+    <div class="scan-helper-text">스마트폰의 승차권 QR코드를<br>네모 테두리 화면 중앙에 맞추어 주세요.</div>
+    
+    <div class="qr-window">
+        <div class="corner top-left"></div>
+        <div class="corner top-right"></div>
+        <div class="corner bottom-left"></div>
+        <div class="corner bottom-right"></div>
+        
+        <div class="laser-line"></div>
     </div>
 </div>
 
-<div id="result-card" class="verified-card">
-    <div class="card-banner">✓ 정당 승차권 확인 완료</div>
-    <div class="card-body">
-        <div class="route-display" id="res-route">-</div>
-        <div class="detail-row">
-            <span class="detail-label">승객 성함</span>
-            <span class="detail-value" id="res-name">-</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">지정 좌석</span>
-            <span class="detail-value" id="res-seat">-</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">검증 상태</span>
-            <span class="detail-value" style="color: var(--korail-green);">정상 승차</span>
-        </div>
-        <button class="btn-reset" onclick="resetScanner()">다음 티켓 확인</button>
+<div class="test-panel">
+    <input type="text" class="test-input" id="test-qr-data" placeholder="여기에 스마트폰에 노출된 암호문 값을 붙여넣으세요">
+    <div>
+        <button class="test-btn" onclick="triggerTestScan(true)">가상 인식 시도</button>
+        <button class="test-btn" style="background-color: #7F1D1D;" onclick="triggerTestScan(false)">오류 티켓 강제 테스트</button>
     </div>
 </div>
 
-<div id="invalid-card" class="invalid-card">
-    <div class="card-banner danger">✗ 유효하지 않은 승차권</div>
-    <div class="card-body">
-        <div class="route-display" style="color: var(--korail-red);">탑승 불가</div>
-        <p style="text-align: center; color: #555; margin: 10px 0; font-size: 14px; line-height: 1.5;">
-            보안 유효 시간(30초)이 경과하였거나,<br>
-            위조된 불법 승차권으로 판독되었습니다.
-        </p>
-        <button class="btn-reset" style="background-color: var(--korail-red);" onclick="resetScanner()">다음 티켓 확인</button>
+<div class="status-overlay" id="overlay">
+    <div id="loading-view" style="display: flex; flex-direction: column; align-items: center;">
+        <div class="spinner"></div>
+        <div class="status-title">QR코드를 해석하여 정보를 조회 중입니다...</div>
+    </div>
+
+    <div id="result-view" style="display: none; width: 100%; flex-direction: column; align-items: center;">
+        <div class="status-title" id="result-title">정상입니다</div>
+        
+        <div class="info-card">
+            <div class="info-row">
+                <span class="info-label">탑승객 명의</span>
+                <span class="info-value" id="res-name">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">구간 정보</span>
+                <span class="info-value" id="res-route">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">호차 / 좌석</span>
+                <span class="info-value" id="res-seat">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">발행 검증시간</span>
+                <span class="info-value" style="font-size: 11px;" id="res-time">-</span>
+            </div>
+        </div>
+
+        <button class="btn-confirm" onclick="resetScanner()">확인 (스캐너 복귀)</button>
     </div>
 </div>
 
 <script>
     const SECRET_KEY = "KorailSecuritySystemKey2026";
-    let html5Qrcode;
 
-    function onScanSuccess(decodedText) {
-        try {
-            html5Qrcode.stop().then(() => {
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('loading').innerText = '판독 진행 중...';
-            });
+    // 오디오 컨텍스트 생성 (브라우저 자체 주파수음을 활용하여 사운드 재생)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            const bytes = CryptoJS.AES.decrypt(decodedText, SECRET_KEY);
-            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+    // 단일 비프음 (삑) 재생 함수
+    function playBeep(frequency, duration) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = frequency;
+        osc.type = "sine";
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    }
 
-            if (!decrypted) throw new Error();
+    // 에러 비프음 (삑삑삑) 재생 함수
+    function playErrorBeep() {
+        playBeep(450, 0.12);
+        setTimeout(() => playBeep(450, 0.12), 200);
+        setTimeout(() => playBeep(400, 0.25), 400);
+    }
 
-            const [name, route, seat, timestampStr] = decrypted.split('|');
-            const ticketTime = parseInt(timestampStr, 10);
-            const currentTime = Date.now();
+    // 가상 QR 리딩 트리거 함수
+    function triggerTestScan(isNormalMode) {
+        const encryptedInput = document.getElementById('test-qr-data').value.trim();
 
-            if (isNaN(ticketTime) || (currentTime - ticketTime) > 30000) {
-                showInvalidCard();
-                return;
-            }
-
-            document.getElementById('res-name').innerText = name;
-            document.getElementById('res-route').innerText = route;
-            document.getElementById('res-seat').innerText = seat;
-
-            document.getElementById('result-card').style.display = 'block';
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-        } catch (error) {
-            showInvalidCard();
+        if (isNormalMode && !encryptedInput) {
+            alert("티켓 화면(ticket.html)에서 생성된 QR 복사값 혹은 암호문 텍스트를 입력해 주세요.");
+            return;
         }
+
+        // 1. 인식 성공음 (삑) 출력
+        playBeep(980, 0.15);
+
+        // 2. 오버레이를 열고 조회중... 로딩 모드 활성화
+        const overlay = document.getElementById('overlay');
+        const loadingView = document.getElementById('loading-view');
+        const resultView = document.getElementById('result-view');
+
+        overlay.style.display = 'flex';
+        loadingView.style.display = 'flex';
+        resultView.style.display = 'none';
+
+        // 3. 3초간 조회 대기 시작
+        setTimeout(() => {
+            loadingView.style.display = 'none';
+            resultView.style.display = 'flex';
+
+            if (isNormalMode) {
+                // 복호화 시도
+                try {
+                    const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
+                    const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+                    if (!decryptedText) throw new Error("복호화 정보 실패");
+
+                    const [name, route, seat, timestamp] = decryptedText.split('|');
+                    
+                    // 만료 시간 체크 (현재 시스템 시간과 티켓 발급 시간 격차 30초 검증)
+                    const issuedTime = parseInt(timestamp);
+                    const now = Date.now();
+                    const diffSeconds = Math.floor((now - issuedTime) / 1000);
+
+                    // 보안상 30초 유효 시간 초과 판단
+                    if (diffSeconds > 30 || diffSeconds < -30) {
+                        triggerErrorScreen("보안 시간 만료 (30초 만료된 QR)");
+                        return;
+                    }
+
+                    // 모든 유효성 완벽 통과 시 성공 화면 렌더링
+                    document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
+                    document.getElementById('result-title').style.color = "var(--success-green)";
+                    document.getElementById('res-name').innerText = name;
+                    document.getElementById('res-route').innerText = route;
+                    document.getElementById('res-seat').innerText = seat;
+                    document.getElementById('res-time').innerText = new Date(issuedTime).toLocaleString();
+
+                } catch (e) {
+                    triggerErrorScreen("위조되거나 변조된 잘못된 QR코드");
+                }
+            } else {
+                // 오류 테스트 버튼 강제 클릭 시
+                triggerErrorScreen("잘못된 승차권 정보");
+            }
+        }, 3000); // 정확히 3초 후 처리
     }
 
-    function showInvalidCard() {
-        document.getElementById('invalid-card').style.display = 'block';
-        if (navigator.vibrate) navigator.vibrate(500); 
+    // 검증 실패 처리 함수
+    function triggerErrorScreen(errorMessage) {
+        // 에러 알림음 (삑삑삑)
+        playErrorBeep();
+
+        document.getElementById('result-title').innerText = "✗ 잘못된 QR코드입니다";
+        document.getElementById('result-title').style.color = "var(--error-red)";
+        document.getElementById('res-name').innerText = "검증 불가";
+        document.getElementById('res-route').innerText = errorMessage;
+        document.getElementById('res-seat').innerText = "탑승 불가";
+        document.getElementById('res-time').innerText = "기록 없음";
     }
 
-    function startCamera() {
-        document.getElementById('result-card').style.display = 'none';
-        document.getElementById('invalid-card').style.display = 'none';
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('loading').innerText = '카메라 연결 중...';
-
-        html5Qrcode = new Html5Qrcode("reader");
-
-        html5Qrcode.start(
-            { facingMode: "environment" }, 
-            { fps: 15, qrbox: (width, height) => ({ width: width * 0.7, height: height * 0.7 }) },
-            onScanSuccess,
-            null
-        ).then(() => {
-            document.getElementById('loading').style.display = 'none';
-        }).catch(err => {
-            document.getElementById('loading').innerText = '카메라를 켤 수 없습니다.';
-        });
-    }
-
+    // 결과 확인 후 스캐너 초기 상태로 돌아가기
     function resetScanner() {
-        startCamera();
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('test-qr-data').value = '';
     }
-
-    window.addEventListener('DOMContentLoaded', startCamera);
 </script>
 </body>
 </html>
