@@ -55,6 +55,7 @@
 
         .form-group {
             margin-bottom: 15px;
+            position: relative; /* 검색 제안창 띄우기 용도 */
         }
 
         .form-group:last-child {
@@ -84,7 +85,67 @@
             border-color: var(--korail-blue);
         }
 
-        /* [추가] 실제 기차 모양 좌석 선택 판넬 */
+        /* [핵심] 실시간 역 검색 결과 레이어 */
+        .search-suggestions {
+            display: none;
+            position: absolute;
+            top: 68px;
+            left: 0;
+            width: 100%;
+            max-height: 180px;
+            background-color: #FFFFFF;
+            border: 1px solid var(--korail-blue);
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            z-index: 100;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        .suggestion-item {
+            padding: 12px 15px;
+            font-size: 15px;
+            font-weight: bold;
+            color: var(--text-dark);
+            cursor: pointer;
+            border-bottom: 1px solid var(--bg-gray);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background-color: #F0F4F8;
+            color: var(--korail-blue);
+        }
+
+        /* 호차 선택 탭 */
+        .cabin-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 0;
+            background-color: #E5E7EB;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--text-gray);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background-color: var(--korail-blue);
+            color: #FFFFFF;
+        }
+
+        /* 기차 모양 좌석 선택 판넬 */
         .train-seat-selector {
             background: #FFFFFF;
             border-radius: 12px;
@@ -95,14 +156,13 @@
 
         .train-cabin {
             background: #E5E7EB;
-            border-radius: 30px 30px 10px 10px; /* 앞부분을 둥글게 기차 대가리 모양으로 디자인 */
+            border-radius: 30px 30px 10px 10px;
             padding: 25px 15px 15px 15px;
             border: 2px solid #D1D5DB;
             position: relative;
         }
 
-        .train-cabin::before {
-            content: "KTX 1호차";
+        .cabin-title {
             position: absolute;
             top: 5px;
             left: 50%;
@@ -112,12 +172,21 @@
             color: #4B5563;
         }
 
-        /* 좌석 열 배치(A, B, 복도, C, D) */
         .seat-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr;
             gap: 10px;
             margin-top: 15px;
+        }
+
+        /* 호차별 동적 배치를 위한 클래스 정의 */
+        .grid-style-1 {
+            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr; /* 2 x 2 */
+        }
+        .grid-style-2 {
+            grid-template-columns: 1fr 0.4fr 1fr 1fr; /* 1 x 2 특실 */
+        }
+        .grid-style-3 {
+            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr; /* 2 x 2 변형 */
         }
 
         .seat-btn {
@@ -137,19 +206,21 @@
             border-color: var(--korail-blue);
         }
 
-        /* 선택된 상태 좌석 스타일 */
         .seat-btn.selected {
             background-color: var(--korail-blue);
             border-color: var(--korail-blue);
             color: #FFFFFF;
         }
 
-        /* 예매 완료된 더미 좌석 */
         .seat-btn.sold-out {
             background-color: #D1D5DB;
             border-color: #D1D5DB;
             color: #9CA3AF;
             cursor: not-allowed;
+        }
+
+        .empty-space {
+            visibility: hidden;
         }
 
         .aisle-space {
@@ -308,44 +379,33 @@
             <label>승객 성함</label>
             <input type="text" id="name" placeholder="홍길동">
         </div>
+        
         <div class="form-group">
             <label>출발역</label>
-            <input type="text" id="dep" placeholder="서울">
+            <input type="text" id="dep" placeholder="출발역 검색 (예: 서울, 대전)" autocomplete="off">
+            <div class="search-suggestions" id="dep-suggestions"></div>
         </div>
+
         <div class="form-group">
             <label>도착역</label>
-            <input type="text" id="arr" placeholder="부산">
+            <input type="text" id="arr" placeholder="도착역 검색 (예: 부산, 광주)" autocomplete="off">
+            <div class="search-suggestions" id="arr-suggestions"></div>
         </div>
     </div>
 
     <div class="train-seat-selector">
-        <label style="margin-bottom: 10px;">좌석 선택 (1호차)</label>
+        <label style="margin-bottom: 10px;">호차 및 좌석 선택</label>
+        
+        <div class="cabin-tabs">
+            <button type="button" class="tab-btn active" onclick="changeCabin(1)">1호차 (일반)</button>
+            <button type="button" class="tab-btn" onclick="changeCabin(2)">2호차 (우등/특실)</button>
+            <button type="button" class="tab-btn" onclick="changeCabin(3)">3호차 (패밀리)</button>
+        </div>
+
         <div class="train-cabin">
-            <div class="seat-grid">
-                <div class="seat-btn" onclick="selectSeat(this, '1A')">1A</div>
-                <div class="seat-btn" onclick="selectSeat(this, '1B')">1B</div>
-                <div class="aisle-space">복도</div>
-                <div class="seat-btn" onclick="selectSeat(this, '1C')">1C</div>
-                <div class="seat-btn" onclick="selectSeat(this, '1D')">1D</div>
-
-                <div class="seat-btn" onclick="selectSeat(this, '2A')">2A</div>
-                <div class="seat-btn sold-out">2B</div>
-                <div class="aisle-space"></div>
-                <div class="seat-btn" onclick="selectSeat(this, '2C')">2C</div>
-                <div class="seat-btn" onclick="selectSeat(this, '2D')">2D</div>
-
-                <div class="seat-btn" onclick="selectSeat(this, '3A')">3A</div>
-                <div class="seat-btn" onclick="selectSeat(this, '3B')">3B</div>
-                <div class="aisle-space"></div>
-                <div class="seat-btn sold-out">3C</div>
-                <div class="seat-btn" onclick="selectSeat(this, '3D')">3D</div>
-
-                <div class="seat-btn" onclick="selectSeat(this, '4A')">4A</div>
-                <div class="seat-btn" onclick="selectSeat(this, '4B')">4B</div>
-                <div class="aisle-space"></div>
-                <div class="seat-btn" onclick="selectSeat(this, '4C')">4C</div>
-                <div class="seat-btn" onclick="selectSeat(this, '4D')">4D</div>
-            </div>
+            <div class="cabin-title" id="cabin-indicator">KTX 1호차</div>
+            <div class="seat-grid grid-style-1" id="seat-grid-container">
+                </div>
         </div>
     </div>
 
@@ -374,7 +434,7 @@
             </div>
             <div class="info-item">
                 <span class="info-title">호차 / 좌석</span>
-                <span class="info-value" id="t-seat">1호차 -</span>
+                <span class="info-value" id="t-seat">-</span>
             </div>
         </div>
 
@@ -396,37 +456,204 @@
     let timerInterval = null;
     let timeLeft = 30;
     let currentTicketData = null;
-    let selectedSeatNum = null; // 선택한 좌석 저장 변수
+    
+    let selectedCabinNum = 1; 
+    let selectedSeatNum = null; 
 
-    // 좌석 클릭 이벤트 처리 함수
+    // 대한민국 주요 여객 열차 취급 철도역 데이터베이스 (총 100개역)
+    const stations = [
+        "서울", "용산", "영등포", "수원", "평택", "천안", "천안아산", "조치원", "부강", "신탄진", 
+        "대전", "영동", "김천", "구미", "왜관", "동대구", "대구", "경산", "청도", "밀양", 
+        "삼랑진", "구포", "부산", "경주", "김천구미", "서대전", "연산", "논산", "강경", "함열", 
+        "익산", "김제", "신태인", "정읍", "백양사", "장성", "광주송정", "나주", "함평", "일로", 
+        "목포", "광주", "극락강", "삼례", "전주", "임실", "오수", "남원", "곡성", "구례구", 
+        "순천", "여수EXPO", "화순", "이양", "진영", "창원", "마산", "함안", "군북", "진주",
+        "행신", "청량리", "양평", "서원주", "만종", "횡성", "둔내", "평창", "진부", "강릉",
+        "동해", "묵호", "정동진", "신경주", "공주", "오송", "충주", "제천", "영주", "안동",
+        "의성", "신녕", "영천", "포항", "진부령", "태백", "사북", "고한", "민둥산", "영월",
+        "홍성", "대천", "장항", "군산", "아산", "온양온천", "예산", "신례원", "광명", "울산"
+    ];
+
+    // 각 호차별 구조 템플릿 정보
+    const cabinLayouts = {
+        1: {
+            className: "grid-style-1",
+            indicator: "KTX 1호차 (일반실 - Standard)",
+            seats: [
+                { type: "seat", name: "1A" }, { type: "seat", name: "1B" }, { type: "aisle" }, { type: "seat", name: "1C" }, { type: "seat", name: "1D" },
+                { type: "seat", name: "2A" }, { type: "sold-out" },            { type: "aisle" }, { type: "seat", name: "2C" }, { type: "seat", name: "2D" },
+                { type: "seat", name: "3A" }, { type: "seat", name: "3B" }, { type: "aisle" }, { type: "sold-out" },            { type: "seat", name: "3D" },
+                { type: "seat", name: "4A" }, { type: "seat", name: "4B" }, { type: "aisle" }, { type: "seat", name: "4C" }, { type: "seat", name: "4D" }
+            ]
+        },
+        2: {
+            className: "grid-style-2",
+            indicator: "KTX 2호차 (우등특실 - First Class)",
+            seats: [
+                { type: "seat", name: "1A" }, { type: "aisle" }, { type: "seat", name: "1C" }, { type: "seat", name: "1D" },
+                { type: "sold-out" },            { type: "aisle" }, { type: "seat", name: "2C" }, { type: "seat", name: "2D" },
+                { type: "seat", name: "3A" }, { type: "aisle" }, { type: "sold-out" },            { type: "seat", name: "3D" },
+                { type: "seat", name: "4A" }, { type: "aisle" }, { type: "seat", name: "4C" }, { type: "seat", name: "4D" }
+            ]
+        },
+        3: {
+            className: "grid-style-3",
+            indicator: "KTX 3호차 (가족동반석 - Family)",
+            seats: [
+                { type: "seat", name: "1A" }, { type: "seat", name: "1B" }, { type: "aisle" }, { type: "seat", name: "1C" }, { type: "seat", name: "1D" },
+                { type: "seat", name: "2A" }, { type: "seat", name: "2B" }, { type: "aisle" }, { type: "seat", name: "2C" }, { type: "seat", name: "2D" },
+                { type: "seat", name: "3A" }, { type: "sold-out" },            { type: "aisle" }, { type: "empty" }, { type: "empty" },
+                { type: "seat", name: "4A" }, { type: "seat", name: "4B" }, { type: "aisle" }, { type: "empty" }, { type: "empty" }
+            ]
+        }
+    };
+
+    // 실시간 역 검색 기능 바인딩 함수
+    function setupStationAutocomplete(inputId, suggestionId) {
+        const input = document.getElementById(inputId);
+        const suggestionBox = document.getElementById(suggestionId);
+
+        // 검색창 포커스 시 전체 리스트업
+        input.addEventListener('focus', function() {
+            showFilteredStations(input.value, suggestionBox, input);
+        });
+
+        // 텍스트 입력할 때마다 필터링
+        input.addEventListener('input', function() {
+            showFilteredStations(input.value, suggestionBox, input);
+        });
+
+        // 다른 곳 터치하면 제안창 닫기
+        document.addEventListener('click', function(e) {
+            if (e.target !== input && e.target !== suggestionBox) {
+                suggestionBox.style.display = 'none';
+            }
+        });
+    }
+
+    // 초성 혹은 검색 단어로 필터링하여 보여주는 핵심 로직
+    function showFilteredStations(query, box, input) {
+        box.innerHTML = "";
+        const cleanQuery = query.trim().toLowerCase();
+
+        // 쿼리가 빈값이면 추천/기본 상위 역목록 10개만 보여줌
+        const filtered = stations.filter(station => {
+            return station.toLowerCase().includes(cleanQuery);
+        });
+
+        if (filtered.length === 0) {
+            const noResult = document.createElement('div');
+            noResult.className = "suggestion-item";
+            noResult.style.color = "#FF0000";
+            noResult.innerText = "일치하는 철도역이 없습니다.";
+            box.appendChild(noResult);
+        } else {
+            filtered.forEach(station => {
+                const item = document.createElement('div');
+                item.className = "suggestion-item";
+                item.innerText = station + "역";
+                item.onclick = function() {
+                    input.value = station;
+                    box.style.display = 'none';
+                };
+                box.appendChild(item);
+            });
+        }
+        box.style.display = 'block';
+    }
+
+    // 탭 이동 및 해당 호차 구조 렌더링 함수
+    function changeCabin(cabinNum) {
+        selectedCabinNum = cabinNum;
+        selectedSeatNum = null; 
+
+        const tabs = document.querySelectorAll('.tab-btn');
+        tabs.forEach((tab, index) => {
+            if (index + 1 === cabinNum) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+
+        renderCabin();
+    }
+
+    // 선택된 호차 데이터에 맞추어 DOM 그리기
+    function renderCabin() {
+        const cabinData = cabinLayouts[selectedCabinNum];
+        const gridContainer = document.getElementById('seat-grid-container');
+        const indicator = document.getElementById('cabin-indicator');
+
+        indicator.innerText = cabinData.indicator;
+        gridContainer.className = "seat-grid " + cabinData.className;
+        gridContainer.innerHTML = "";
+
+        cabinData.seats.forEach(item => {
+            if (item.type === "seat") {
+                const btn = document.createElement('div');
+                btn.className = "seat-btn";
+                btn.innerText = item.name;
+                btn.onclick = function() { selectSeat(btn, item.name); };
+                gridContainer.appendChild(btn);
+            } else if (item.type === "sold-out") {
+                const btn = document.createElement('div');
+                btn.className = "seat-btn sold-out";
+                btn.innerText = "선택불가";
+                gridContainer.appendChild(btn);
+            } else if (item.type === "aisle") {
+                const aisle = document.createElement('div');
+                aisle.className = "aisle-space";
+                aisle.innerText = "복도";
+                gridContainer.appendChild(aisle);
+            } else if (item.type === "empty") {
+                const empty = document.createElement('div');
+                empty.className = "empty-space";
+                gridContainer.appendChild(empty);
+            }
+        });
+    }
+
+    // 좌석 클릭 이벤트
     function selectSeat(element, seatId) {
-        if (element.classList.contains('sold-out')) return;
+        const selectedElements = document.querySelectorAll('.seat-btn.selected');
+        selectedElements.forEach(el => el.classList.remove('selected'));
 
-        // 기존에 선택된 다른 좌석들의 활성화 표시 제거
-        const activeSeats = document.querySelectorAll('.seat-btn.selected');
-        activeSeats.forEach(seat => seat.classList.remove('selected'));
-
-        // 새로 선택한 좌석만 활성화
         element.classList.add('selected');
         selectedSeatNum = seatId;
     }
 
     function generateAndShowTicket() {
         const name = document.getElementById('name').value.trim();
-        const dep = document.getElementById('dep').value.trim();
-        const arr = document.getElementById('arr').value.trim();
+        const dep = document.getElementById('dep').value.trim().replace('역', '');
+        const arr = document.getElementById('arr').value.trim().replace('역', '');
 
-        if(!name || !dep || !arr) {
-            alert("승객 정보 및 승하차 역 정보를 모두 채워주세요.");
+        if(!name) {
+            alert("승객 성함을 정확히 입력해 주세요.");
+            return;
+        }
+
+        if(!dep || !arr) {
+            alert("출발역과 도착역을 검색 목록에서 선택해 주세요.");
+            return;
+        }
+
+        if(dep === arr) {
+            alert("출발역과 도착역은 서로 다르게 지정해 주세요.");
+            return;
+        }
+
+        if(!stations.includes(dep) || !stations.includes(arr)) {
+            alert("실제 기차 노선이 존재하는 올바른 역 이름인지 검색창 목록에서 다시 선택해 주세요.");
             return;
         }
 
         if(!selectedSeatNum) {
-            alert("기차 도면에서 원하시는 좌석을 터치하여 선택해 주세요.");
+            alert("원하시는 호차와 좌석을 하단 열차 도면에서 직접 클릭하여 선택해 주세요.");
             return;
         }
 
-        const seatDisplayStr = `1호차 ${selectedSeatNum}`;
+        const seatDisplayStr = `${selectedCabinNum}호차 ${selectedSeatNum}`;
         currentTicketData = { name, dep, arr, seat: seatDisplayStr };
 
         document.getElementById('t-name').innerText = name;
@@ -482,12 +709,16 @@
         document.getElementById('dep').value = '';
         document.getElementById('arr').value = '';
         
-        // 좌석 선택 상태들 원복 초기화
-        const activeSeats = document.querySelectorAll('.seat-btn.selected');
-        activeSeats.forEach(seat => seat.classList.remove('selected'));
-        selectedSeatNum = null;
+        changeCabin(1);
         currentTicketData = null;
     }
+
+    window.onload = function() {
+        renderCabin();
+        // 출발 및 도착역 검색 인풋 리스너 연동
+        setupStationAutocomplete('dep', 'dep-suggestions');
+        setupStationAutocomplete('arr', 'arr-suggestions');
+    };
 </script>
 </body>
 </html>
