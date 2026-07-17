@@ -37,6 +37,7 @@
             font-size: 18px;
             background-color: #1F2937;
             border-bottom: 1px solid var(--border-color);
+            z-index: 10;
         }
 
         /* QR 스캐너 뷰포트 영역 */
@@ -56,19 +57,29 @@
             color: #9CA3AF;
             margin-bottom: 20px;
             text-align: center;
+            z-index: 10;
         }
 
-        /* QR 인식 사각 틀 */
+        /* QR 인식 영역 및 실제 카메라 화면이 띄워지는 컨테이너 */
         .qr-window {
             position: relative;
             width: 250px;
             height: 250px;
             border: 1px solid rgba(255, 255, 255, 0.15);
-            background-color: rgba(0, 0, 0, 0.4);
+            background-color: #000000;
             box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
-        /* [핵심] QR 테두리 모서리 강조 표시 (ㄱ, ㄴ, ㄷ, ㄹ) */
+        /* [실제 카메라 비디오 태그] */
+        #camera-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 테두리 모서리 강조 표시 (ㄱ, ㄴ, ㄷ, ㄹ) */
         .corner {
             position: absolute;
             width: 24px;
@@ -76,6 +87,7 @@
             border-color: var(--korail-blue);
             border-style: solid;
             pointer-events: none;
+            z-index: 5;
         }
         .top-left {
             top: -2px;
@@ -98,24 +110,7 @@
             border-width: 0 4px 4px 0; /* ┘ */
         }
 
-        /* 빨간색 가이드 레이저 라인 애니메이션 */
-        .laser-line {
-            position: absolute;
-            width: 100%;
-            height: 2px;
-            background-color: #E71E2D;
-            box-shadow: 0 0 10px #E71E2D;
-            top: 0;
-            animation: scanning 2.5s infinite linear;
-        }
-
-        @keyframes scanning {
-            0% { top: 0%; }
-            50% { top: 100%; }
-            100% { top: 0%; }
-        }
-
-        /* 팝업 오버레이 (조회 중, 결과창 통합 사용) */
+        /* 통합 진행상황/결과 노출 오버레이 레이어 */
         .status-overlay {
             display: none;
             position: fixed;
@@ -209,6 +204,7 @@
             box-sizing: border-box;
             border-top: 1px solid var(--border-color);
             text-align: center;
+            z-index: 10;
         }
 
         .test-input {
@@ -245,12 +241,12 @@
     <div class="scan-helper-text">스마트폰의 승차권 QR코드를<br>네모 테두리 화면 중앙에 맞추어 주세요.</div>
     
     <div class="qr-window">
+        <video id="camera-preview" autoplay playsinline muted></video>
+
         <div class="corner top-left"></div>
         <div class="corner top-right"></div>
         <div class="corner bottom-left"></div>
         <div class="corner bottom-right"></div>
-        
-        <div class="laser-line"></div>
     </div>
 </div>
 
@@ -296,9 +292,23 @@
 
 <script>
     const SECRET_KEY = "KorailSecuritySystemKey2026";
-
-    // 오디오 컨텍스트 생성 (브라우저 자체 주파수음을 활용하여 사운드 재생)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 스마트폰 카메라 구동 기능 활성화
+    async function initCamera() {
+        const video = document.getElementById('camera-preview');
+        try {
+            // 후면 카메라 우선 활성화 조건 설정
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" },
+                audio: false
+            });
+            video.srcObject = stream;
+        } catch (err) {
+            console.warn("카메라 장치를 시작할 수 없습니다. 가상 테스트 모드는 정상 작동합니다.", err);
+            // 브라우저가 보안상(https가 아닌 localhost/http 환경 등) 거부했거나 카메라가 없는 환경일 때의 대응
+        }
+    }
 
     // 단일 비프음 (삑) 재생 함수
     function playBeep(frequency, duration) {
@@ -348,7 +358,6 @@
             resultView.style.display = 'flex';
 
             if (isNormalMode) {
-                // 복호화 시도
                 try {
                     const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
                     const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
@@ -357,7 +366,6 @@
 
                     const [name, route, seat, timestamp] = decryptedText.split('|');
                     
-                    // 만료 시간 체크 (현재 시스템 시간과 티켓 발급 시간 격차 30초 검증)
                     const issuedTime = parseInt(timestamp);
                     const now = Date.now();
                     const diffSeconds = Math.floor((now - issuedTime) / 1000);
@@ -368,7 +376,7 @@
                         return;
                     }
 
-                    // 모든 유효성 완벽 통과 시 성공 화면 렌더링
+                    // 모든 유효성 검증 성공
                     document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
                     document.getElementById('result-title').style.color = "var(--success-green)";
                     document.getElementById('res-name').innerText = name;
@@ -380,15 +388,12 @@
                     triggerErrorScreen("위조되거나 변조된 잘못된 QR코드");
                 }
             } else {
-                // 오류 테스트 버튼 강제 클릭 시
                 triggerErrorScreen("잘못된 승차권 정보");
             }
-        }, 3000); // 정확히 3초 후 처리
+        }, 3000); // 3초 조회 대기 로직 적용
     }
 
-    // 검증 실패 처리 함수
     function triggerErrorScreen(errorMessage) {
-        // 에러 알림음 (삑삑삑)
         playErrorBeep();
 
         document.getElementById('result-title').innerText = "✗ 잘못된 QR코드입니다";
@@ -399,11 +404,15 @@
         document.getElementById('res-time').innerText = "기록 없음";
     }
 
-    // 결과 확인 후 스캐너 초기 상태로 돌아가기
     function resetScanner() {
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('test-qr-data').value = '';
     }
+
+    // 페이지 시작과 동시에 카메라 초기 구동 시도
+    window.onload = function() {
+        initCamera();
+    };
 </script>
 </body>
 </html>
