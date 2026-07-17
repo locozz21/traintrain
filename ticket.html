@@ -58,10 +58,6 @@
             position: relative;
         }
 
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-
         label {
             display: block;
             font-size: 12px;
@@ -91,7 +87,7 @@
             top: 68px;
             left: 0;
             width: 100%;
-            max-height: 220px; /* 많은 데이터를 보기 위해 높이를 살짝 올림 */
+            max-height: 220px;
             background-color: #FFFFFF;
             border: 1px solid var(--korail-blue);
             border-radius: 6px;
@@ -108,10 +104,6 @@
             color: var(--text-dark);
             cursor: pointer;
             border-bottom: 1px solid var(--bg-gray);
-        }
-
-        .suggestion-item:last-child {
-            border-bottom: none;
         }
 
         .suggestion-item:hover {
@@ -196,10 +188,6 @@
             text-align: center;
             cursor: pointer;
             transition: all 0.2s;
-        }
-
-        .seat-btn:hover {
-            border-color: var(--korail-blue);
         }
 
         .seat-btn.selected {
@@ -345,6 +333,33 @@
             align-items: center;
         }
 
+        .text-output-container {
+            width: 100%;
+            max-width: 320px;
+            margin-top: 15px;
+            background: #F1F5F9;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #CBD5E1;
+            box-sizing: border-box;
+        }
+
+        .text-output-label {
+            font-size: 11px;
+            color: #64748B;
+            margin-bottom: 4px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .text-output-value {
+            font-family: monospace;
+            font-size: 11px;
+            color: #334155;
+            word-break: break-all;
+            user-select: all;
+        }
+
         .timer-box {
             margin-top: 15px;
             font-size: 14px;
@@ -433,14 +448,18 @@
         </div>
 
         <div id="qrcode"></div>
+
+        <div class="text-output-container">
+            <span class="text-output-label">암호화된 난수(스캔용 복사값)</span>
+            <div class="text-output-value" id="text-output-data">데이터 생성 중...</div>
+        </div>
         
         <div class="timer-box" id="timer-display">
             남은 시간: 30초
         </div>
         
         <div class="capture-warning">
-            ※ 캡처된 화면으로는 탑승하실 수 없습니다.<br>
-            보안을 위해 남은 시간이 지나면 QR코드가 자동으로 갱신됩니다.
+            ※ 보안을 위해 남은 시간이 지나면 QR코드가 자동으로 갱신됩니다.
         </div>
     </div>
 </div>
@@ -454,7 +473,6 @@
     let selectedCabinNum = 1; 
     let selectedSeatNum = null; 
 
-    // [전면 확대] 대한민국 고속철도 및 일반선 철도역 DB 총 260여개 (가나다순)
     const stations = [
         "가남", "가평", "각계", "갈촌", "감곡장호원", "강경", "강릉", "강촌", "건천", "경산", 
         "경주", "계룡", "고명", "고사리", "고한", "곡성", "공전", "공주", "관동", "광명", 
@@ -468,19 +486,19 @@
         "부조", "북영천", "북울산", "북천", "사곡", "사북", "사상", "삼랑진", "삼례", "삼산", 
         "삼척", "삼척해변", "살미", "삽교", "상동", "상주", "상천", "서경주", "서광주", "서대구", 
         "서대전", "서동탄", "서목포", "서울", "서원주", "서천", "석불", "석포", "성동", "성환", 
-        "세종대왕릉", "소백산", "소정리", "송정", 송정리="송정리(광주송정)", "수안보온천", "수원", "수색", "순천", "승부", 
+        "세종대왕릉", "소백산", "소정리", "송정", "수안보온천", "수원", "수색", "순천", "승부", 
         "신거", "신경주", "신광양항", "신녕", "신동", "신례원", "신림", "신망리", "신탄진", "신태인", 
-        "신해운대", "심천", "쌍룡", "아산", "아우라지", "안동", "안라", "안양", "안평", "안현", 
+        "신해운대", "심천", "쌍룡", "아산", "아우라지", "안동", "안양", "안평", "안현", 
         "앙성온천", "약목", "양동", "양백", "양보", "양수", "양평", "여수EXPO", "여천", "연산", 
         "연풍", "영덕", "영동", "영등포", "영월", "영주", "영천", "예당", "예산", "예천", 
         "오근장", "오수", "오송", "오태", "온양온천", "완사", "왜관", "용궁", "용동", "용산", 
         "용소", "우보", "운천", "울산", "웅천", "원동", "원북", "원주", "유수골", "음성", 
         "의성", "이원", "이천", "이평", "익산", "인제", "일광", "일로", "임기", "임실", 
         "임포", "임한", "입석리", "자미원", "장성", "장수", "장유", "장항", "재산", "전의", 
-        "전주", "정동진", "정선", "정읍", "제천", "제천조차장", "조치원", "좌천", "주덕", "지평", 
+        "전주", "정동진", "정선", "정읍", "제천", "조치원", "좌천", "주덕", "지평", 
         "진부", "진부령", "진영", "진위", "진주", "진해", "창원", "창원중앙", "천안", "천안아산", 
         "철암", "청도", "청리", "청소", "청량리", "청주", "청주공항", "초성리", "추풍령", "충주", 
-        "태백", "태화강", "판교", "판교(경기)", "평창", "평택", "평택지제", "포항", "풍기", "하양", 
+        "태백", "태화강", "판교", "평창", "평택", "평택지제", "포항", "풍기", "하양", 
         "한림정", "함안", "함열", "함평", "행신", "현동", "호계", "홍성", "화명", "화본", 
         "화순", "횡성", "효자", "희방사"
     ];
@@ -552,7 +570,6 @@
             noResult.innerText = "일치하는 철도역이 없습니다.";
             box.appendChild(noResult);
         } else {
-            // 한글 가나다순으로 정렬 정돈하여 표출
             filtered.sort().forEach(station => {
                 const item = document.createElement('div');
                 item.className = "suggestion-item";
@@ -646,12 +663,12 @@
         }
 
         if(!stations.includes(dep) || !stations.includes(arr)) {
-            alert("실제 기차 노선이 존재하는 올바른 역 이름인지 검색창 목록에서 다시 선택해 주세요.");
+            alert("올바른 철도역 이름을 검색창 목록에서 다시 선택해 주세요.");
             return;
         }
 
         if(!selectedSeatNum) {
-            alert("원하시는 호차와 좌석을 하단 열차 도면에서 직접 클릭하여 선택해 주세요.");
+            alert("원하시는 호차와 좌석을 선택해 주세요.");
             return;
         }
 
@@ -685,6 +702,8 @@
             correctLevel : QRCode.CorrectLevel.M
         });
 
+        document.getElementById("text-output-data").innerText = encryptedData;
+
         timeLeft = 30;
         document.getElementById('timer-display').innerText = `남은 시간: ${timeLeft}초`;
         document.getElementById('timer-display').style.color = "#E71E2D";
@@ -692,6 +711,12 @@
         clearInterval(timerInterval);
         timerInterval = setInterval(() => {
             timeLeft--;
+            
+            // [핵심 기능] 시간이 줄어들 때마다 '징~' 하고 짧은 진동 발생
+            if (navigator.vibrate) {
+                navigator.vibrate(80); // 80밀리초 동안 가볍고 직관적인 진동
+            }
+
             if (timeLeft <= 0) {
                 updateQRAndTimer();
             } else {
