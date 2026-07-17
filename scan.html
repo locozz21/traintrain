@@ -3,37 +3,237 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Korail Kids - 승무원 검수기</title>
+    <title>KORAIL - 승무원 검수 단말기</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root {
             --korail-blue: #0054A6;
-            --korail-green: #28a745;
-            --bg-color: #F4F5F7;
+            --korail-green: #1F873C;
+            --bg-dark: #1E293B;
             --card-bg: #FFFFFF;
         }
 
-        body { 
-            font-family: 'Malgun Gothic', 'Noto Sans KR', sans-serif; 
-            background-color: var(--bg-color); 
-            margin: 0; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+            background-color: var(--bg-dark);
+            color: #FFFFFF;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
 
-        .container { 
-            background: var(--card-bg); 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 380px; 
-            box-sizing: border-box; 
+        .header {
+            width: 100%;
+            background-color: #0F172A;
+            padding: 16px 0;
             text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+            border-bottom: 2px solid var(--korail-blue);
+            letter-spacing: 0.5px;
         }
+
+        .scanner-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* QR 카메라 영역 스타일링 */
+        #reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: none !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        #reader__scan_region {
+            background-color: #000000;
+        }
+
+        #reader__dashboard button {
+            background-color: var(--korail-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 실시간 승차권 판독 결과 카드 */
+        .verified-card {
+            display: none;
+            position: fixed;
+            bottom: 30px;
+            left: 5%;
+            width: 90%;
+            max-width: 380px;
+            background-color: var(--card-bg);
+            color: #333333;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            border: 2px solid var(--korail-green);
+            overflow: hidden;
+            z-index: 1000;
+        }
+
+        .card-banner {
+            background-color: var(--korail-green);
+            color: #FFFFFF;
+            padding: 12px;
+            font-weight: bold;
+            font-size: 15px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .route-display {
+            font-size: 24px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 15px;
+            color: #111111;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 12px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        .detail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-label {
+            color: #777777;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: #111111;
+            font-weight: bold;
+        }
+
+        .btn-reset {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--korail-blue);
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">KORAIL 승무원 휴대용 검수기</div>
+
+<div class="scanner-container">
+    <div id="reader"></div>
+</div>
+
+<div id="result-card" class="verified-card">
+    <div class="card-banner">✓ 정상 승차권 확인 완료</div>
+    <div class="card-body">
+        <div class="route-display" id="res-route">서울 ➔ 부산</div>
+        <div class="detail-row">
+            <span class="detail-label">승객 성함</span>
+            <span class="detail-value" id="res-name">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">지정 좌석</span>
+            <span class="detail-value" id="res-seat">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">검증 상태</span>
+            <span class="detail-value" style="color: var(--korail-green);">유효한 티켓</span>
+        </div>
+        <button class="btn-reset" onclick="resetScanner()">다음 티켓 확인</button>
+    </div>
+</div>
+
+<script>
+    const SECRET_KEY = "KorailSecuritySystemKey2024";
+    let html5QrcodeScanner;
+
+    function onScanSuccess(decodedText) {
+        try {
+            // 카메라 스캔 임시 중단 (화면 정지)
+            html5QrcodeScanner.clear();
+            document.getElementById('reader').style.display = 'none';
+
+            // AES 암호 복호화 시도
+            const bytes = CryptoJS.AES.decrypt(decodedText, SECRET_KEY);
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+
+            if (!decrypted) {
+                throw new Error("비밀키 불일치 및 디코딩 불가능");
+            }
+
+            // 분리 처리
+            const [name, route, seat] = decrypted.split('|');
+
+            // 화면에 바인딩
+            document.getElementById('res-name').innerText = name;
+            document.getElementById('res-route').innerText = route;
+            document.getElementById('res-seat').innerText = seat;
+
+            // 판독 카드 띄우기
+            document.getElementById('result-card').style.display = 'block';
+
+            // 진동 발생으로 인식 완료 감각 피드백 (모바일 사양 지원 시)
+            if (navigator.vibrate) navigator.vibrate(150);
+
+        } catch (error) {
+            alert("⚠️ 유효하지 않거나 위조된 승차권입니다!");
+            resetScanner();
+        }
+    }
+
+    function startScanner() {
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 15, qrbox: { width: 250, height: 250 } }
+        );
+        html5QrcodeScanner.render(onScanSuccess);
+        document.getElementById('reader').style.display = 'block';
+        document.getElementById('result-card').style.display = 'none';
+    }
+
+    function resetScanner() {
+        if(html5QrcodeScanner) {
+            html5QrcodeScanner.clear();
+        }
+        startScanner();
+    }
+
+    // 초기 스캐너 동작 개시
+    startScanner();
+</script>
+</body>
+</html>
 
         h2.logo { 
             color: var(--korail-blue); 
