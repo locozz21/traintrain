@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Korail Kids - 승무원 검수기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root {
+            --korail-blue: #0054A6;
+            --korail-green: #28a745;
+            --bg-color: #F4F5F7;
+            --card-bg: #FFFFFF;
+        }
+
+        body { 
+            font-family: 'Malgun Gothic', 'Noto Sans KR', sans-serif; 
+            background-color: var(--bg-color); 
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+
+        .container { 
+            background: var(--card-bg); 
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+            width: 100%; 
+            max-width: 380px; 
+            box-sizing: border-box; 
+            text-align: center;
+        }
+
+        h2.logo { 
+            color: var(--korail-blue); 
+            font-weight: 800; 
+            margin-top: 0; 
+            margin-bottom: 20px; 
+            font-size: 22px; 
+        }
+
+        #reader { 
+            width: 100%; 
+            border-radius: 10px; 
+            overflow: hidden; 
+            border: none !important; 
+        }
+        
+        #reader__scan_region {
+            background: #000;
+        }
+        #reader__dashboard button {
+            background-color: var(--korail-blue);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .result-box { 
+            margin-top: 25px; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+            display: none; 
+            text-align: left; 
+            border: 2px solid var(--korail-green);
+        }
+        .result-header { 
+            background-color: var(--korail-green); 
+            color: white; 
+            padding: 12px; 
+            font-weight: bold; 
+            text-align: center;
+            font-size: 16px;
+        }
+        .result-body { 
+            background: white; 
+            padding: 20px; 
+        }
+        .res-route { 
+            font-size: 20px; 
+            font-weight: 800; 
+            color: #333; 
+            margin-bottom: 12px; 
+            text-align: center;
+            border-bottom: 1px solid #EEE;
+            padding-bottom: 10px;
+        }
+        .res-info { 
+            font-size: 15px; 
+            color: #666; 
+            margin-bottom: 7px; 
+            display: flex;
+            justify-content: space-between;
+        }
+        .res-label { font-weight: bold; color: #333; }
+        
+        #reset-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #666;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 15px;
+            cursor: pointer;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="logo">Korail Kids 승무원</h2>
+    
+    <div id="reader"></div>
+    
+    <button id="reset-btn" onclick="resetScanner()">다시 스캔하기</button>
+
+    <div id="result" class="result-box">
+        <div class="result-header">✅ 정당 승차권 확인</div>
+        <div class="result-body">
+            <div class="res-route" id="res-route"></div>
+            <div class="res-info"><span class="res-label">탑승객</span> <span id="res-name"></span></div>
+            <div class="res-info"><span class="res-label">좌석</span> <span id="res-seat"></span></div>
+            <div class="res-info"><span class="res-label">상태</span> <span style="color:var(--korail-green); font-weight:bold;">확인 완료</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const SECRET_KEY = "우리들의비밀키123";
+    let html5QrcodeScanner;
+
+    function onScanSuccess(decodedText, decodedResult) {
+        try {
+            // 스캔에 성공하면 다른 작동 정지
+            html5QrcodeScanner.clear();
+            document.getElementById('reader').style.display = 'none';
+
+            // AES 복호화 시도
+            const bytes = CryptoJS.AES.decrypt(decodedText, SECRET_KEY);
+            const decryptedData = bytes.toString(CryptoJS.enc.Utf8);
+
+            if (!decryptedData) {
+                throw new Error("데크립트 실패");
+            }
+
+            // 구분자 |를 기준으로 원상태 데이터 복원
+            const [name, route, seat] = decryptedData.split('|');
+
+            // 화면 표시
+            document.getElementById('res-name').innerText = name;
+            document.getElementById('res-route').innerText = route;
+            document.getElementById('res-seat').innerText = seat;
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('reset-btn').style.display = 'block';
+
+            // 진동 기능 (모바일 기기 전용)
+            if (navigator.vibrate) navigator.vibrate(200);
+
+        } catch (error) {
+            alert("⚠️ 유효하지 않은 기차표입니다!\n(위조되었거나 비밀키가 맞지 않습니다.)");
+            resetScanner();
+        }
+    }
+
+    function startScanner() {
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 15, qrbox: {width: 250, height: 250} }
+        );
+        html5QrcodeScanner.render(onScanSuccess);
+        document.getElementById('reader').style.display = 'block';
+        document.getElementById('result').style.display = 'none';
+        document.getElementById('reset-btn').style.display = 'none';
+    }
+
+    function resetScanner() {
+        if(html5QrcodeScanner) {
+            html5QrcodeScanner.clear();
+        }
+        startScanner();
+    }
+
+    // 웹페이지 시작과 동시에 스캐너 작동
+    startScanner();
+</script>
+</body>
+</html>
