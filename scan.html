@@ -366,7 +366,7 @@
         processVerification(inputData);
     }
 
-    // 날카롭고 직관적인 "띡" 소리를 구현하기 위한 웹 오디오 제어
+    // 날카로운 "띡" 소리를 위한 방형파 오디오 재생기
     function playSharpBeep(frequency, duration) {
         try {
             initAudio();
@@ -378,12 +378,13 @@
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             
-            osc.frequency.value = frequency; 
-            // [음색 튜닝] 파형을 sine에서 배음이 가득해 찢어지는 듯한 square(사각파)로 변형
+            osc.frequency.setValueAtTime(frequency, audioCtx.currentTime); 
+            // [방형파(Square wave) 적용] - 배음이 찢어지는 날카로운 소리를 표현
             osc.type = "square"; 
             
-            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // 고주파 사각파는 귀가 피로할 수 있어 볼륨 미세 조절
-            gainNode.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + duration);
+            // 즉각적인 어택과 정밀한 소리 끊김을 구현해 명확한 띡 소리 구현
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime); 
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
             
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
@@ -392,15 +393,15 @@
         }
     }
 
-    // 정상: 초고음의 매우 선명하고 찢어지는 듯한 "띡" (1회, 1400Hz)
+    // 정상: 초고음 방형파 1500Hz "띡" (1회)
     function playSuccessBeep() {
-        playSharpBeep(1400, 0.08);
+        playSharpBeep(1500, 0.08);
     }
 
-    // 실패: 동일 피치 초고음 "띡띡" (2회 연속, 1400Hz)
+    // 실패: 동일 주파수 1500Hz 고속 2연타 "띡띡" (2회)
     function playErrorBeep() {
-        playSharpBeep(1400, 0.07);
-        setTimeout(() => playSharpBeep(1400, 0.07), 110);
+        playSharpBeep(1500, 0.07);
+        setTimeout(() => playSharpBeep(1500, 0.07), 110);
     }
 
     function clearAllTimers() {
@@ -452,9 +453,8 @@
 
                 // [검증 정상]
                 playSuccessBeep();
-                usedTickets.add(encryptedInput); // 승차권 파기 등록
+                usedTickets.add(encryptedInput); // 사용 완료 목록 등록
 
-                // 레이아웃 스위칭: 정상정보 활성화, 오류정보 비활성화
                 successCard.style.display = "block";
                 errorCard.style.display = "none";
 
@@ -477,12 +477,12 @@
 
     // 오류 발생 화면 세팅 함수 (카드 삭제 및 띡띡 소리)
     function showErrorResult(errorMessage) {
-        playErrorBeep(); // 띡띡(2회) 경고음
+        playErrorBeep(); // 방형파 1500Hz 2회 출력
 
         const successCard = document.getElementById('success-card');
         const errorCard = document.getElementById('error-card');
 
-        // 레이아웃 스위칭: 정상정보 감추기, 오류 안내 박스만 활성화
+        // 레이아웃 스위칭: 정상정보 감추고 에러메시지만 노출
         successCard.style.display = "none";
         errorCard.style.display = "block";
         errorCard.innerText = errorMessage;
