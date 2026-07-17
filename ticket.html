@@ -55,7 +55,7 @@
 
         .form-group {
             margin-bottom: 15px;
-            position: relative; /* 검색 제안창 띄우기 용도 */
+            position: relative;
         }
 
         .form-group:last-child {
@@ -85,14 +85,13 @@
             border-color: var(--korail-blue);
         }
 
-        /* [핵심] 실시간 역 검색 결과 레이어 */
         .search-suggestions {
             display: none;
             position: absolute;
             top: 68px;
             left: 0;
             width: 100%;
-            max-height: 180px;
+            max-height: 220px; /* 많은 데이터를 보기 위해 높이를 살짝 올림 */
             background-color: #FFFFFF;
             border: 1px solid var(--korail-blue);
             border-radius: 6px;
@@ -120,7 +119,6 @@
             color: var(--korail-blue);
         }
 
-        /* 호차 선택 탭 */
         .cabin-tabs {
             display: flex;
             gap: 8px;
@@ -145,7 +143,6 @@
             color: #FFFFFF;
         }
 
-        /* 기차 모양 좌석 선택 판넬 */
         .train-seat-selector {
             background: #FFFFFF;
             border-radius: 12px;
@@ -178,15 +175,14 @@
             margin-top: 15px;
         }
 
-        /* 호차별 동적 배치를 위한 클래스 정의 */
         .grid-style-1 {
-            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr; /* 2 x 2 */
+            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr;
         }
         .grid-style-2 {
-            grid-template-columns: 1fr 0.4fr 1fr 1fr; /* 1 x 2 특실 */
+            grid-template-columns: 1fr 0.4fr 1fr 1fr;
         }
         .grid-style-3 {
-            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr; /* 2 x 2 변형 */
+            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr;
         }
 
         .seat-btn {
@@ -244,7 +240,6 @@
             cursor: pointer;
         }
 
-        /* 전체화면 모바일 승차권 */
         #full-ticket-overlay {
             display: none;
             position: fixed;
@@ -382,13 +377,13 @@
         
         <div class="form-group">
             <label>출발역</label>
-            <input type="text" id="dep" placeholder="출발역 검색 (예: 서울, 대전)" autocomplete="off">
+            <input type="text" id="dep" placeholder="출발역 검색 (예: 서울, 이천, 부발)" autocomplete="off">
             <div class="search-suggestions" id="dep-suggestions"></div>
         </div>
 
         <div class="form-group">
             <label>도착역</label>
-            <input type="text" id="arr" placeholder="도착역 검색 (예: 부산, 광주)" autocomplete="off">
+            <input type="text" id="arr" placeholder="도착역 검색 (예: 충주, 판교, 부산)" autocomplete="off">
             <div class="search-suggestions" id="arr-suggestions"></div>
         </div>
     </div>
@@ -404,8 +399,7 @@
 
         <div class="train-cabin">
             <div class="cabin-title" id="cabin-indicator">KTX 1호차</div>
-            <div class="seat-grid grid-style-1" id="seat-grid-container">
-                </div>
+            <div class="seat-grid grid-style-1" id="seat-grid-container"></div>
         </div>
     </div>
 
@@ -419,7 +413,7 @@
     </div>
     
     <div class="ticket-body">
-        <div class="train-type">KTX-산천</div>
+        <div class="train-type">KTX / 일반열차</div>
         
         <div class="station-container">
             <div class="station-name" id="t-dep">서울</div>
@@ -460,21 +454,37 @@
     let selectedCabinNum = 1; 
     let selectedSeatNum = null; 
 
-    // 대한민국 주요 여객 열차 취급 철도역 데이터베이스 (총 100개역)
+    // [전면 확대] 대한민국 고속철도 및 일반선 철도역 DB 총 260여개 (가나다순)
     const stations = [
-        "서울", "용산", "영등포", "수원", "평택", "천안", "천안아산", "조치원", "부강", "신탄진", 
-        "대전", "영동", "김천", "구미", "왜관", "동대구", "대구", "경산", "청도", "밀양", 
-        "삼랑진", "구포", "부산", "경주", "김천구미", "서대전", "연산", "논산", "강경", "함열", 
-        "익산", "김제", "신태인", "정읍", "백양사", "장성", "광주송정", "나주", "함평", "일로", 
-        "목포", "광주", "극락강", "삼례", "전주", "임실", "오수", "남원", "곡성", "구례구", 
-        "순천", "여수EXPO", "화순", "이양", "진영", "창원", "마산", "함안", "군북", "진주",
-        "행신", "청량리", "양평", "서원주", "만종", "횡성", "둔내", "평창", "진부", "강릉",
-        "동해", "묵호", "정동진", "신경주", "공주", "오송", "충주", "제천", "영주", "안동",
-        "의성", "신녕", "영천", "포항", "진부령", "태백", "사북", "고한", "민둥산", "영월",
-        "홍성", "대천", "장항", "군산", "아산", "온양온천", "예산", "신례원", "광명", "울산"
+        "가남", "가평", "각계", "갈촌", "감곡장호원", "강경", "강릉", "강촌", "건천", "경산", 
+        "경주", "계룡", "고명", "고사리", "고한", "곡성", "공전", "공주", "관동", "광명", 
+        "광양", "광주", "광주송정", "괴동", "구례구", "구미", "구포", "군북", "군산", "군업", 
+        "극락강", "금강", "금곡", "기장", "김제", "김천", "김천구미", "나전", "나주", "남성현", 
+        "남원", "남창", "노안", "논산", "능주", "다대포항", "단양", "대구", "대구역", "대전", 
+        "대전조차장", "대천", "덕소", "덕하", "도계", "도고온천", "도경리", "동대구", "동두천", "동백산", 
+        "동해", "동화", "두백", "둔내", "득량", "등량", "마산", "만종", "망상", "망상해수욕장", 
+        "매곡", "명봉", "목포", "무안", "묵호", "문경", "물금", "미라", "미력", "밀양", 
+        "반성", "백양사", "벌교", "범일", "보성", "부강", "부발", "부산", "부산진", "부전", 
+        "부조", "북영천", "북울산", "북천", "사곡", "사북", "사상", "삼랑진", "삼례", "삼산", 
+        "삼척", "삼척해변", "살미", "삽교", "상동", "상주", "상천", "서경주", "서광주", "서대구", 
+        "서대전", "서동탄", "서목포", "서울", "서원주", "서천", "석불", "석포", "성동", "성환", 
+        "세종대왕릉", "소백산", "소정리", "송정", 송정리="송정리(광주송정)", "수안보온천", "수원", "수색", "순천", "승부", 
+        "신거", "신경주", "신광양항", "신녕", "신동", "신례원", "신림", "신망리", "신탄진", "신태인", 
+        "신해운대", "심천", "쌍룡", "아산", "아우라지", "안동", "안라", "안양", "안평", "안현", 
+        "앙성온천", "약목", "양동", "양백", "양보", "양수", "양평", "여수EXPO", "여천", "연산", 
+        "연풍", "영덕", "영동", "영등포", "영월", "영주", "영천", "예당", "예산", "예천", 
+        "오근장", "오수", "오송", "오태", "온양온천", "완사", "왜관", "용궁", "용동", "용산", 
+        "용소", "우보", "운천", "울산", "웅천", "원동", "원북", "원주", "유수골", "음성", 
+        "의성", "이원", "이천", "이평", "익산", "인제", "일광", "일로", "임기", "임실", 
+        "임포", "임한", "입석리", "자미원", "장성", "장수", "장유", "장항", "재산", "전의", 
+        "전주", "정동진", "정선", "정읍", "제천", "제천조차장", "조치원", "좌천", "주덕", "지평", 
+        "진부", "진부령", "진영", "진위", "진주", "진해", "창원", "창원중앙", "천안", "천안아산", 
+        "철암", "청도", "청리", "청소", "청량리", "청주", "청주공항", "초성리", "추풍령", "충주", 
+        "태백", "태화강", "판교", "판교(경기)", "평창", "평택", "평택지제", "포항", "풍기", "하양", 
+        "한림정", "함안", "함열", "함평", "행신", "현동", "호계", "홍성", "화명", "화본", 
+        "화순", "횡성", "효자", "희방사"
     ];
 
-    // 각 호차별 구조 템플릿 정보
     const cabinLayouts = {
         1: {
             className: "grid-style-1",
@@ -508,22 +518,18 @@
         }
     };
 
-    // 실시간 역 검색 기능 바인딩 함수
     function setupStationAutocomplete(inputId, suggestionId) {
         const input = document.getElementById(inputId);
         const suggestionBox = document.getElementById(suggestionId);
 
-        // 검색창 포커스 시 전체 리스트업
         input.addEventListener('focus', function() {
             showFilteredStations(input.value, suggestionBox, input);
         });
 
-        // 텍스트 입력할 때마다 필터링
         input.addEventListener('input', function() {
             showFilteredStations(input.value, suggestionBox, input);
         });
 
-        // 다른 곳 터치하면 제안창 닫기
         document.addEventListener('click', function(e) {
             if (e.target !== input && e.target !== suggestionBox) {
                 suggestionBox.style.display = 'none';
@@ -531,12 +537,10 @@
         });
     }
 
-    // 초성 혹은 검색 단어로 필터링하여 보여주는 핵심 로직
     function showFilteredStations(query, box, input) {
         box.innerHTML = "";
-        const cleanQuery = query.trim().toLowerCase();
+        const cleanQuery = query.trim().toLowerCase().replace('역', '');
 
-        // 쿼리가 빈값이면 추천/기본 상위 역목록 10개만 보여줌
         const filtered = stations.filter(station => {
             return station.toLowerCase().includes(cleanQuery);
         });
@@ -548,7 +552,8 @@
             noResult.innerText = "일치하는 철도역이 없습니다.";
             box.appendChild(noResult);
         } else {
-            filtered.forEach(station => {
+            // 한글 가나다순으로 정렬 정돈하여 표출
+            filtered.sort().forEach(station => {
                 const item = document.createElement('div');
                 item.className = "suggestion-item";
                 item.innerText = station + "역";
@@ -562,7 +567,6 @@
         box.style.display = 'block';
     }
 
-    // 탭 이동 및 해당 호차 구조 렌더링 함수
     function changeCabin(cabinNum) {
         selectedCabinNum = cabinNum;
         selectedSeatNum = null; 
@@ -579,7 +583,6 @@
         renderCabin();
     }
 
-    // 선택된 호차 데이터에 맞추어 DOM 그리기
     function renderCabin() {
         const cabinData = cabinLayouts[selectedCabinNum];
         const gridContainer = document.getElementById('seat-grid-container');
@@ -614,7 +617,6 @@
         });
     }
 
-    // 좌석 클릭 이벤트
     function selectSeat(element, seatId) {
         const selectedElements = document.querySelectorAll('.seat-btn.selected');
         selectedElements.forEach(el => el.classList.remove('selected'));
@@ -715,7 +717,6 @@
 
     window.onload = function() {
         renderCabin();
-        // 출발 및 도착역 검색 인풋 리스너 연동
         setupStationAutocomplete('dep', 'dep-suggestions');
         setupStationAutocomplete('arr', 'arr-suggestions');
     };
