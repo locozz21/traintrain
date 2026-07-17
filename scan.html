@@ -137,7 +137,7 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
+            0 { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
@@ -316,6 +316,9 @@
     let html5QrcodeScanner = null;
     let autoCloseTimeout = null;
     let autoCloseInterval = null;
+    
+    // [중요] 연속 스캔 중복 제어용 플래그
+    let isProcessing = false;
 
     // [중복 방지] 승차 처리 완료 티켓 저장소
     const usedTickets = new Set();
@@ -350,23 +353,50 @@
         });
     }
 
+    // 1. QR코드 스캔 성공 시 핸들러 수정
     function onScanSuccess(decodedText) {
+        if (isProcessing) return; // 이미 처리 중이면 연속된 입력은 완전히 무시
+        
+        isProcessing = true; // 플래그 락(Lock)
+        
+        // 카메라 스캔 일시정지 (스캔 기능 물리적 정지)
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.pause(true);
+        }
+
         clearAllTimers();
-        processVerification(decodedText);
+
+        // [요청 사항] 인식을 확실히 인지할 수 있도록 1초(1000ms)의 대기 딜레이를 부여한 후 처리
+        setTimeout(() => {
+            processVerification(decodedText);
+        }, 1000);
     }
 
     function handleManualVerify() {
+        if (isProcessing) return;
+        isProcessing = true;
+        
         initAudio();
         const inputData = document.getElementById('test-qr-data').value.trim();
         if (!inputData) {
             alert("암호화된 문자열을 입력해 주세요.");
+            isProcessing = false;
             return;
         }
+        
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.pause(true);
+        }
+
         clearAllTimers();
-        processVerification(inputData);
+        
+        // 수동 검증도 일치된 흐름을 위해 1초 딜레이 적용
+        setTimeout(() => {
+            processVerification(inputData);
+        }, 1000);
     }
 
-    // 날카로운 "띡" 소리를 위한 방형파 오디오 재생기
+    // 1500Hz 방형파 재생기
     function playSharpBeep(frequency, duration) {
         try {
             initAudio();
@@ -379,11 +409,10 @@
             gainNode.connect(audioCtx.destination);
             
             osc.frequency.setValueAtTime(frequency, audioCtx.currentTime); 
-            // [방형파(Square wave) 적용] - 배음이 찢어지는 날카로운 소리를 표현
             osc.type = "square"; 
             
-            // 즉각적인 어택과 정밀한 소리 끊김을 구현해 명확한 띡 소리 구현
-            gainNode.gain.setValueAtTime(0.7, audioCtx.currentTime); 
+            // 크고 날카로운 소리를 위한 볼륨 조정
+            gainNode.gain.setValueAtTime(0.6, audioCtx.currentTime); 
             gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
             
             osc.start();
@@ -418,6 +447,7 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
+        // 분석 애니메이션 딜레이
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
@@ -472,7 +502,7 @@
 
             // 공통 5초 타이머 시작
             startAutoCloseTimer();
-        }, 800); 
+        }, 600); 
     }
 
     // 오류 발생 화면 세팅 함수 (카드 삭제 및 띡띡 소리)
@@ -482,7 +512,7 @@
         const successCard = document.getElementById('success-card');
         const errorCard = document.getElementById('error-card');
 
-        // 레이아웃 스위칭: 정상정보 감추고 에러메시지만 노출
+        // 레이아웃 스위칭
         successCard.style.display = "none";
         errorCard.style.display = "block";
         errorCard.innerText = errorMessage;
@@ -511,6 +541,12 @@
         clearAllTimers();
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('test-qr-data').value = '';
+        
+        // 처리 플래그 잠금 해제 및 카메라 스캔 재시작
+        isProcessing = false;
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.resume();
+        }
     }
 
     window.onload = function() {
