@@ -25,7 +25,6 @@
             align-items: center;
         }
 
-        /* 상단 네비게이션 바 */
         .nav-bar {
             width: 100%;
             background-color: #FFFFFF;
@@ -34,6 +33,342 @@
             font-weight: bold;
             font-size: 18px;
             color: var(--korail-blue);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .form-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .input-card {
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-gray);
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--korail-blue);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background-color: var(--korail-blue);
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 전체화면 모바일 승차권 */
+        #full-ticket-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #FFFFFF;
+            z-index: 9999;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .ticket-header {
+            background-color: var(--korail-blue);
+            color: #FFFFFF;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .close-btn {
+            font-size: 28px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .ticket-body {
+            flex: 1;
+            padding: 30px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+        }
+
+        .train-type {
+            color: var(--korail-blue);
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .station-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 320px;
+            margin-bottom: 25px;
+        }
+
+        .station-name {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--text-dark);
+        }
+
+        .station-arrow {
+            font-size: 24px;
+            color: var(--korail-blue);
+        }
+
+        .info-grid {
+            width: 100%;
+            max-width: 320px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            border-top: 1px dashed #CCCCCC;
+            border-bottom: 1px dashed #CCCCCC;
+            padding: 20px 0;
+            margin-bottom: 25px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-title {
+            font-size: 12px;
+            color: var(--text-gray);
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-dark);
+        }
+
+        #qrcode {
+            background-color: #FFFFFF;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 타이머 디자인 */
+        .timer-box {
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #E71E2D; /* KTX 레드 */
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .capture-warning {
+            margin-top: 20px;
+            font-size: 11px;
+            color: var(--text-gray);
+            text-align: center;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav-bar">KORAIL 승차권 예매</div>
+
+<div class="form-container">
+    <div class="input-card">
+        <div class="form-group">
+            <label>승객 성함</label>
+            <input type="text" id="name" placeholder="홍길동">
+        </div>
+        <div class="form-group">
+            <label>출발역</label>
+            <input type="text" id="dep" placeholder="서울">
+        </div>
+        <div class="form-group">
+            <label>도착역</label>
+            <input type="text" id="arr" placeholder="부산">
+        </div>
+        <div class="form-group">
+            <label>좌석 정보</label>
+            <input type="text" id="seat" placeholder="KTX 105호차 7A">
+        </div>
+    </div>
+    <button class="btn-submit" onclick="generateAndShowTicket()">승차권 발행</button>
+</div>
+
+<div id="full-ticket-overlay">
+    <div class="ticket-header">
+        <span>스마트티켓 (KORAIL)</span>
+        <span class="close-btn" onclick="closeTicket()">&times;</span>
+    </div>
+    
+    <div class="ticket-body">
+        <div class="train-type">KTX-산천</div>
+        
+        <div class="station-container">
+            <div class="station-name" id="t-dep">서울</div>
+            <div class="station-arrow">→</div>
+            <div class="station-name" id="t-arr">부산</div>
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-title">타는 사람</span>
+                <span class="info-value" id="t-name">홍길동</span>
+            </div>
+            <div class="info-item">
+                <span class="info-title">호차 / 좌석</span>
+                <span class="info-value" id="t-seat">105호차 7A</span>
+            </div>
+        </div>
+
+        <div id="qrcode"></div>
+        
+        <div class="timer-box" id="timer-display">
+            남은 시간: 30초
+        </div>
+        
+        <div class="capture-warning">
+            ※ 캡처된 화면으로는 탑승하실 수 없습니다.<br>
+            보안을 위해 남은 시간이 지나면 QR코드가 자동으로 갱신됩니다.
+        </div>
+    </div>
+</div>
+
+<script>
+    const SECRET_KEY = "KorailSecuritySystemKey2024";
+    let timerInterval = null;
+    let timeLeft = 30;
+    let currentTicketData = null;
+
+    function generateAndShowTicket() {
+        const name = document.getElementById('name').value.trim();
+        const dep = document.getElementById('dep').value.trim();
+        const arr = document.getElementById('arr').value.trim();
+        const seat = document.getElementById('seat').value.trim();
+
+        if(!name || !dep || !arr || !seat) {
+            alert("모든 승차 정보를 빠짐없이 입력해 주세요.");
+            return;
+        }
+
+        // 입력받은 기본 데이터를 메모리에 보관
+        currentTicketData = { name, dep, arr, seat };
+
+        // 티켓 텍스트 적용
+        document.getElementById('t-name').innerText = name;
+        document.getElementById('t-dep').innerText = dep;
+        document.getElementById('t-arr').innerText = arr;
+        document.getElementById('t-seat').innerText = seat;
+
+        // QR 생성 및 타이머 시작
+        updateQRAndTimer();
+
+        // 전체화면 오버레이 활성화
+        document.getElementById('full-ticket-overlay').style.display = 'flex';
+    }
+
+    // QR코드 생성 및 30초 카운트다운 초기화 함수
+    function updateQRAndTimer() {
+        if (!currentTicketData) return;
+
+        // 현재 시점의 타임스탬프(밀리초 단위)를 데이터에 묶음
+        const timestamp = Date.now();
+        const rawData = `${currentTicketData.name}|${currentTicketData.dep} ➔ ${currentTicketData.arr}|${currentTicketData.seat}|${timestamp}`;
+
+        // 암호화 진행
+        const encryptedData = CryptoJS.AES.encrypt(rawData, SECRET_KEY).toString();
+
+        // QR 이미지 렌더링
+        const qrBox = document.getElementById("qrcode");
+        qrBox.innerHTML = "";
+        new QRCode(qrBox, {
+            text: encryptedData,
+            width: 200,
+            height: 200,
+            correctLevel : QRCode.CorrectLevel.M
+        });
+
+        // 30초 타이머 재설정
+        timeLeft = 30;
+        document.getElementById('timer-display').innerText = `남은 시간: ${timeLeft}초`;
+        document.getElementById('timer-display').style.color = "#E71E2D";
+
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            if (timeLeft <= 0) {
+                // 30초 완료 시 새 암호코드로 QR 갱신
+                updateQRAndTimer();
+            } else {
+                document.getElementById('timer-display').innerText = `남은 시간: ${timeLeft}초`;
+                if(timeLeft <= 5) {
+                    // 마감 5초 전 경고 피드백
+                    document.getElementById('timer-display').style.color = "#FF0000";
+                }
+            }
+        }, 1000);
+    }
+
+    function closeTicket() {
+        clearInterval(timerInterval);
+        document.getElementById('full-ticket-overlay').style.display = 'none';
+        
+        document.getElementById('name').value = '';
+        document.getElementById('dep').value = '';
+        document.getElementById('arr').value = '';
+        document.getElementById('seat').value = '';
+        currentTicketData = null;
+    }
+</script>
+</body>
+</html>
             border-bottom: 1px solid var(--border-color);
             box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         }
