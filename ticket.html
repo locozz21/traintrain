@@ -23,6 +23,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .nav-bar {
@@ -48,11 +50,15 @@
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .form-group {
-            margin-bottom: 18px;
+            margin-bottom: 15px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
         }
 
         label {
@@ -76,6 +82,83 @@
 
         input:focus {
             border-color: var(--korail-blue);
+        }
+
+        /* [추가] 실제 기차 모양 좌석 선택 판넬 */
+        .train-seat-selector {
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .train-cabin {
+            background: #E5E7EB;
+            border-radius: 30px 30px 10px 10px; /* 앞부분을 둥글게 기차 대가리 모양으로 디자인 */
+            padding: 25px 15px 15px 15px;
+            border: 2px solid #D1D5DB;
+            position: relative;
+        }
+
+        .train-cabin::before {
+            content: "KTX 1호차";
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            font-weight: bold;
+            color: #4B5563;
+        }
+
+        /* 좌석 열 배치(A, B, 복도, C, D) */
+        .seat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 0.4fr 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .seat-btn {
+            background-color: #FFFFFF;
+            border: 1.5px solid #9CA3AF;
+            border-radius: 6px;
+            padding: 10px 0;
+            font-size: 12px;
+            font-weight: bold;
+            color: #374151;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .seat-btn:hover {
+            border-color: var(--korail-blue);
+        }
+
+        /* 선택된 상태 좌석 스타일 */
+        .seat-btn.selected {
+            background-color: var(--korail-blue);
+            border-color: var(--korail-blue);
+            color: #FFFFFF;
+        }
+
+        /* 예매 완료된 더미 좌석 */
+        .seat-btn.sold-out {
+            background-color: #D1D5DB;
+            border-color: #D1D5DB;
+            color: #9CA3AF;
+            cursor: not-allowed;
+        }
+
+        .aisle-space {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #9CA3AF;
+            font-weight: bold;
         }
 
         .btn-submit {
@@ -233,11 +316,39 @@
             <label>도착역</label>
             <input type="text" id="arr" placeholder="부산">
         </div>
-        <div class="form-group">
-            <label>좌석 정보</label>
-            <input type="text" id="seat" placeholder="KTX 105호차 7A">
+    </div>
+
+    <div class="train-seat-selector">
+        <label style="margin-bottom: 10px;">좌석 선택 (1호차)</label>
+        <div class="train-cabin">
+            <div class="seat-grid">
+                <div class="seat-btn" onclick="selectSeat(this, '1A')">1A</div>
+                <div class="seat-btn" onclick="selectSeat(this, '1B')">1B</div>
+                <div class="aisle-space">복도</div>
+                <div class="seat-btn" onclick="selectSeat(this, '1C')">1C</div>
+                <div class="seat-btn" onclick="selectSeat(this, '1D')">1D</div>
+
+                <div class="seat-btn" onclick="selectSeat(this, '2A')">2A</div>
+                <div class="seat-btn sold-out">2B</div>
+                <div class="aisle-space"></div>
+                <div class="seat-btn" onclick="selectSeat(this, '2C')">2C</div>
+                <div class="seat-btn" onclick="selectSeat(this, '2D')">2D</div>
+
+                <div class="seat-btn" onclick="selectSeat(this, '3A')">3A</div>
+                <div class="seat-btn" onclick="selectSeat(this, '3B')">3B</div>
+                <div class="aisle-space"></div>
+                <div class="seat-btn sold-out">3C</div>
+                <div class="seat-btn" onclick="selectSeat(this, '3D')">3D</div>
+
+                <div class="seat-btn" onclick="selectSeat(this, '4A')">4A</div>
+                <div class="seat-btn" onclick="selectSeat(this, '4B')">4B</div>
+                <div class="aisle-space"></div>
+                <div class="seat-btn" onclick="selectSeat(this, '4C')">4C</div>
+                <div class="seat-btn" onclick="selectSeat(this, '4D')">4D</div>
+            </div>
         </div>
     </div>
+
     <button class="btn-submit" onclick="generateAndShowTicket()">승차권 발행</button>
 </div>
 
@@ -263,7 +374,7 @@
             </div>
             <div class="info-item">
                 <span class="info-title">호차 / 좌석</span>
-                <span class="info-value" id="t-seat">105호차 7A</span>
+                <span class="info-value" id="t-seat">1호차 -</span>
             </div>
         </div>
 
@@ -285,24 +396,43 @@
     let timerInterval = null;
     let timeLeft = 30;
     let currentTicketData = null;
+    let selectedSeatNum = null; // 선택한 좌석 저장 변수
+
+    // 좌석 클릭 이벤트 처리 함수
+    function selectSeat(element, seatId) {
+        if (element.classList.contains('sold-out')) return;
+
+        // 기존에 선택된 다른 좌석들의 활성화 표시 제거
+        const activeSeats = document.querySelectorAll('.seat-btn.selected');
+        activeSeats.forEach(seat => seat.classList.remove('selected'));
+
+        // 새로 선택한 좌석만 활성화
+        element.classList.add('selected');
+        selectedSeatNum = seatId;
+    }
 
     function generateAndShowTicket() {
         const name = document.getElementById('name').value.trim();
         const dep = document.getElementById('dep').value.trim();
         const arr = document.getElementById('arr').value.trim();
-        const seat = document.getElementById('seat').value.trim();
 
-        if(!name || !dep || !arr || !seat) {
-            alert("모든 승차 정보를 빠짐없이 입력해 주세요.");
+        if(!name || !dep || !arr) {
+            alert("승객 정보 및 승하차 역 정보를 모두 채워주세요.");
             return;
         }
 
-        currentTicketData = { name, dep, arr, seat };
+        if(!selectedSeatNum) {
+            alert("기차 도면에서 원하시는 좌석을 터치하여 선택해 주세요.");
+            return;
+        }
+
+        const seatDisplayStr = `1호차 ${selectedSeatNum}`;
+        currentTicketData = { name, dep, arr, seat: seatDisplayStr };
 
         document.getElementById('t-name').innerText = name;
         document.getElementById('t-dep').innerText = dep;
         document.getElementById('t-arr').innerText = arr;
-        document.getElementById('t-seat').innerText = seat;
+        document.getElementById('t-seat').innerText = seatDisplayStr;
 
         updateQRAndTimer();
 
@@ -351,7 +481,11 @@
         document.getElementById('name').value = '';
         document.getElementById('dep').value = '';
         document.getElementById('arr').value = '';
-        document.getElementById('seat').value = '';
+        
+        // 좌석 선택 상태들 원복 초기화
+        const activeSeats = document.querySelectorAll('.seat-btn.selected');
+        activeSeats.forEach(seat => seat.classList.remove('selected'));
+        selectedSeatNum = null;
         currentTicketData = null;
     }
 </script>
