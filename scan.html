@@ -148,6 +148,7 @@
             text-align: center;
         }
 
+        /* 상세 정보 카드 (성공시에만 노출) */
         .info-card {
             background-color: #1F2937;
             border: 1px solid var(--border-color);
@@ -156,6 +157,23 @@
             width: 100%;
             max-width: 320px;
             margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        /* 오류 메세지 단독 표시용 상자 (실패시에만 노출) */
+        .error-message-box {
+            display: none;
+            color: var(--error-red);
+            font-size: 18px;
+            font-weight: bold;
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error-red);
+            padding: 25px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+            margin-bottom: 20px;
             box-sizing: border-box;
         }
 
@@ -265,7 +283,7 @@
     <div id="result-view" style="display: none; width: 100%; flex-direction: column; align-items: center;">
         <div class="status-title" id="result-title">정상 승차권</div>
         
-        <div class="info-card">
+        <div class="info-card" id="success-card">
             <div class="info-row">
                 <span class="info-label">탑승객 명의</span>
                 <span class="info-value" id="res-name">-</span>
@@ -284,6 +302,10 @@
             </div>
         </div>
 
+        <div class="error-message-box" id="error-card">
+            오류 원인이 표시됩니다.
+        </div>
+
         <div class="auto-close-timer" id="timer-text">5초 후 스캐너로 복귀합니다...</div>
     </div>
 </div>
@@ -295,10 +317,9 @@
     let autoCloseTimeout = null;
     let autoCloseInterval = null;
 
-    // [중복 방지] 이미 승차에 사용 완료된 토큰들을 기록하는 Set 객체
+    // [중복 방지] 승차 처리 완료 티켓 저장소
     const usedTickets = new Set();
 
-    // 오디오 컨텍스트 초기화 및 잠금 해제
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -308,7 +329,6 @@
         }
     }
 
-    // 터치 시 오디오 강제 연동
     document.body.addEventListener('click', function() {
         initAudio();
         document.getElementById('audio-banner').style.display = 'none';
@@ -326,17 +346,15 @@
             config,
             onScanSuccess
         ).catch(err => {
-            console.warn("카메라 연동에 실패했습니다.", err);
+            console.warn("카메라 감지 오류", err);
         });
     }
 
-    // 카메라 즉시 자동 인식
     function onScanSuccess(decodedText) {
         clearAllTimers();
         processVerification(decodedText);
     }
 
-    // 검증 버튼 클릭 연동
     function handleManualVerify() {
         initAudio();
         const inputData = document.getElementById('test-qr-data').value.trim();
@@ -348,8 +366,8 @@
         processVerification(inputData);
     }
 
-    // 명확한 소리를 내기 위해 웹 오디오 API 소스 구현 개선
-    function playBeep(frequency, duration) {
+    // 날카롭고 직관적인 "띡" 소리를 구현하기 위한 웹 오디오 제어
+    function playSharpBeep(frequency, duration) {
         try {
             initAudio();
             if (!audioCtx) return;
@@ -360,31 +378,29 @@
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             
-            // 주파수를 1000Hz로 상향 조정 (띡 소리 유도)
-            osc.frequency.value = frequency;
-            osc.type = "sine";
+            osc.frequency.value = frequency; 
+            // [음색 튜닝] 파형을 sine에서 배음이 가득해 찢어지는 듯한 square(사각파)로 변형
+            osc.type = "square"; 
             
-            // 즉각적인 볼륨 확보 및 페이드아웃으로 명확한 타격음 생성
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // 고주파 사각파는 귀가 피로할 수 있어 볼륨 미세 조절
+            gainNode.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + duration);
             
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         } catch (e) {
-            console.warn("오디오 플레이 실패", e);
+            console.warn("소리 출력 제약 발생", e);
         }
     }
 
-    // 마트 바코드 인식음 - 띡 (높고 명확한 1000Hz)
+    // 정상: 초고음의 매우 선명하고 찢어지는 듯한 "띡" (1회, 1400Hz)
     function playSuccessBeep() {
-        playBeep(1000, 0.1);
+        playSharpBeep(1400, 0.08);
     }
 
-    // 마트 오류음 - 띡띡띡 (동일 주파수 1000Hz 고속 3연타)
+    // 실패: 동일 피치 초고음 "띡띡" (2회 연속, 1400Hz)
     function playErrorBeep() {
-        playBeep(1000, 0.08);
-        setTimeout(() => playBeep(1000, 0.08), 120);
-        setTimeout(() => playBeep(1000, 0.08), 240);
+        playSharpBeep(1400, 0.07);
+        setTimeout(() => playSharpBeep(1400, 0.07), 110);
     }
 
     function clearAllTimers() {
@@ -392,7 +408,6 @@
         if (autoCloseInterval) clearInterval(autoCloseInterval);
     }
 
-    // 승차권 조회 검증
     function processVerification(encryptedInput) {
         const overlay = document.getElementById('overlay');
         const loadingView = document.getElementById('loading-view');
@@ -406,11 +421,14 @@
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
 
+            const successCard = document.getElementById('success-card');
+            const errorCard = document.getElementById('error-card');
+
             try {
-                // [재사용 방지 체크]
+                // 중복 사용 제어
                 if (usedTickets.has(encryptedInput)) {
-                    showErrorResult("이미 사용된 승차권 (재사용 불가)");
-                    startAutoCloseTimer(); // 오류가 뜨더라도 5초 후 복귀 자동 시작
+                    showErrorResult("이미 사용 처리된 승차권입니다.");
+                    startAutoCloseTimer();
                     return;
                 }
 
@@ -425,16 +443,20 @@
                 const now = Date.now();
                 const diffSeconds = Math.floor((now - issuedTime) / 1000);
 
-                // 엄격한 30초 조건 확인
+                // 유효시간 30초 검증
                 if (diffSeconds > 30 || diffSeconds < -30) {
-                    showErrorResult("보안 시간 만료 (30초 초과)");
+                    showErrorResult("보안 유효 시간 초과 (30초 만료)");
                     startAutoCloseTimer();
                     return;
                 }
 
-                // 정상 판정 및 성공 시 재사용 블랙리스트 등록
+                // [검증 정상]
                 playSuccessBeep();
-                usedTickets.add(encryptedInput); // 사용 완료 리스트에 원본 등록
+                usedTickets.add(encryptedInput); // 승차권 파기 등록
+
+                // 레이아웃 스위칭: 정상정보 활성화, 오류정보 비활성화
+                successCard.style.display = "block";
+                errorCard.style.display = "none";
 
                 document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
                 document.getElementById('result-title').style.color = "var(--success-green)";
@@ -444,25 +466,31 @@
                 document.getElementById('res-time').innerText = new Date(issuedTime).toLocaleString();
 
             } catch (e) {
-                showErrorResult("위조되거나 변조된 잘못된 QR코드");
+                // [검증 실패]
+                showErrorResult("조회 불가 (유효하지 않은 QR코드)");
             }
 
-            // 정상, 위조 구분 없이 모든 상황에서 5초 카운트다운 적용
+            // 공통 5초 타이머 시작
             startAutoCloseTimer();
         }, 800); 
     }
 
+    // 오류 발생 화면 세팅 함수 (카드 삭제 및 띡띡 소리)
     function showErrorResult(errorMessage) {
-        playErrorBeep();
-        document.getElementById('result-title').innerText = "✗ 잘못된 승차권입니다";
+        playErrorBeep(); // 띡띡(2회) 경고음
+
+        const successCard = document.getElementById('success-card');
+        const errorCard = document.getElementById('error-card');
+
+        // 레이아웃 스위칭: 정상정보 감추기, 오류 안내 박스만 활성화
+        successCard.style.display = "none";
+        errorCard.style.display = "block";
+        errorCard.innerText = errorMessage;
+
+        document.getElementById('result-title').innerText = "✗ 검증 불가";
         document.getElementById('result-title').style.color = "var(--error-red)";
-        document.getElementById('res-name').innerText = "검증 불가";
-        document.getElementById('res-route').innerText = errorMessage;
-        document.getElementById('res-seat').innerText = "탑승 불가";
-        document.getElementById('res-time').innerText = "기록 없음";
     }
 
-    // 5초 자동 복귀 타이머 제어 함수
     function startAutoCloseTimer() {
         clearAllTimers();
         
