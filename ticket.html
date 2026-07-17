@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Korail Kids - 기차표 발권기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --korail-blue: #0054A6;
+            --bg-color: #F4F5F7;
+            --card-bg: #FFFFFF;
+            --text-dark: #333333;
+            --text-gray: #777777;
+        }
+
+        body { 
+            font-family: 'Malgun Gothic', 'Noto Sans KR', sans-serif; 
+            background-color: var(--bg-color); 
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+
+        .container { 
+            background: var(--card-bg); 
+            padding: 25px; 
+            border-radius: 15px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+            width: 100%; 
+            max-width: 380px; 
+            box-sizing: border-box; 
+        }
+
+        h2.logo { 
+            color: var(--korail-blue); 
+            font-weight: 800; 
+            text-align: center; 
+            margin-top: 0; 
+            margin-bottom: 25px; 
+            font-size: 24px; 
+            letter-spacing: -1px;
+        }
+
+        .input-group { margin-bottom: 15px; text-align: left; }
+        .input-group label { 
+            display: block; 
+            font-size: 13px; 
+            color: var(--text-gray); 
+            margin-bottom: 5px; 
+            font-weight: bold; 
+        }
+        input { 
+            width: 100%; 
+            padding: 12px 15px; 
+            box-sizing: border-box; 
+            border-radius: 8px; 
+            border: 1px solid #DDD; 
+            font-size: 16px; 
+            transition: border-color 0.2s; 
+        }
+        input:focus { border-color: var(--korail-blue); outline: none; }
+
+        button { 
+            width: 100%; 
+            padding: 15px; 
+            background-color: var(--korail-blue); 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            margin-top: 10px; 
+            transition: background 0.2s; 
+        }
+        button:active { background-color: #004488; }
+
+        #ticket-result { 
+            display: none; 
+            margin-top: 30px; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15); 
+        }
+        .ticket-header { 
+            background-color: var(--korail-blue); 
+            color: white; 
+            padding: 10px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            text-align: center;
+        }
+        .ticket-body { 
+            background: white; 
+            padding: 20px; 
+            border-bottom: 2px dashed #DDD; 
+        }
+        .ticket-route { 
+            font-size: 22px; 
+            font-weight: 800; 
+            color: var(--text-dark); 
+            margin-bottom: 15px; 
+            text-align: center;
+        }
+        .ticket-info { 
+            font-size: 14px; 
+            color: var(--text-gray); 
+            margin-bottom: 5px; 
+        }
+
+        #qrcode { 
+            background: white; 
+            padding: 20px 0; 
+            display: flex; 
+            justify-content: center; 
+            border-radius: 0 0 12px 12px; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="logo">Korail Kids</h2>
+    
+    <div class="input-group">
+        <label>탑승객 이름</label>
+        <input type="text" id="name" placeholder="예) 김철수">
+    </div>
+    
+    <div class="input-group">
+        <label>출발지 -> 도착지</label>
+        <input type="text" id="route" placeholder="예) 서울 -> 부산">
+    </div>
+    
+    <div class="input-group">
+        <label>좌석 정보</label>
+        <input type="text" id="seat" placeholder="예) KTX 3호차 5A">
+    </div>
+    
+    <button onclick="generateTicket()">승차권 발행</button>
+
+    <div id="ticket-result">
+        <div class="ticket-header">KTX 모바일 승차권</div>
+        <div class="ticket-body">
+            <div class="ticket-route" id="card-route"></div>
+            <div class="ticket-info">탑승객: <span id="card-name" style="color:#333; font-weight:bold;"></span></div>
+            <div class="ticket-info">좌석: <span id="card-seat" style="color:#333; font-weight:bold;"></span></div>
+        </div>
+        <div id="qrcode"></div>
+    </div>
+</div>
+
+<script>
+    // 비밀키 (스캐너의 비밀키와 일치해야 정상 복호화됩니다)
+    const SECRET_KEY = "우리들의비밀키123";
+
+    function generateTicket() {
+        const name = document.getElementById('name').value;
+        const route = document.getElementById('route').value;
+        const seat = document.getElementById('seat').value;
+
+        if(!name || !route || !seat) {
+            alert("모든 정보를 입력해주세요!");
+            return;
+        }
+
+        // 구분자 | 로 데이터를 하나로 묶고 암호화
+        const rawData = `${name}|${route}|${seat}`;
+        const encryptedData = CryptoJS.AES.encrypt(rawData, SECRET_KEY).toString();
+
+        // 티켓 그래픽 업데이트
+        document.getElementById('card-name').innerText = name;
+        document.getElementById('card-route').innerText = route;
+        document.getElementById('card-seat').innerText = seat;
+        document.getElementById('ticket-result').style.display = 'block';
+
+        // QR 생성
+        const qrContainer = document.getElementById("qrcode");
+        qrContainer.innerHTML = "";
+        new QRCode(qrContainer, {
+            text: encryptedData,
+            width: 180,
+            height: 180,
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        // 입력 폼 비우기
+        document.getElementById('name').value = '';
+        document.getElementById('route').value = '';
+        document.getElementById('seat').value = '';
+        
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+</script>
+</body>
+</html>
