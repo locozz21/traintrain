@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KORAIL - 승차권 검표 시스템</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root {
             --korail-blue: #0054A6;
@@ -70,10 +71,14 @@
             overflow: hidden;
         }
 
-        #camera-preview {
+        /* 실제 QR 카메라 라이브러리가 렌더링될 영역 */
+        #reader {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+        }
+
+        #reader video {
+            object-fit: cover !important;
         }
 
         .corner {
@@ -151,7 +156,7 @@
             padding: 20px;
             width: 100%;
             max-width: 320px;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
             box-sizing: border-box;
         }
 
@@ -175,17 +180,10 @@
             color: #FFFFFF;
         }
 
-        .btn-confirm {
-            width: 100%;
-            max-width: 320px;
-            padding: 15px;
-            background-color: var(--korail-blue);
-            color: #FFFFFF;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
+        .auto-close-timer {
+            font-size: 14px;
+            color: #9CA3AF;
+            margin-top: 10px;
         }
 
         .test-panel {
@@ -199,29 +197,37 @@
             z-index: 10;
         }
 
-        .test-input {
-            width: calc(100% - 30px);
-            padding: 10px;
-            background-color: #111827;
-            border: 1px solid var(--border-color);
-            color: #FFFFFF;
-            font-size: 12px;
-            outline: none;
-            border-radius: 4px;
+        .input-row {
+            display: flex;
+            gap: 8px;
             margin-bottom: 8px;
         }
 
-        .test-btn {
-            background-color: #374151;
+        .test-input {
+            flex: 1;
+            padding: 12px;
+            background-color: #111827;
+            border: 1px solid var(--border-color);
+            color: #FFFFFF;
+            font-size: 13px;
+            outline: none;
+            border-radius: 6px;
+        }
+
+        .action-btn {
+            padding: 0 15px;
+            background-color: var(--korail-blue);
             color: #FFFFFF;
             border: none;
-            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: bold;
             font-size: 13px;
-            border-radius: 4px;
             cursor: pointer;
+            white-space: nowrap;
         }
-        .test-btn:hover {
-            background-color: var(--korail-blue);
+
+        .action-btn:hover {
+            opacity: 0.9;
         }
     </style>
 </head>
@@ -233,7 +239,7 @@
     <div class="scan-helper-text">스마트폰의 승차권 QR코드를<br>네모 테두리 화면 중앙에 맞추어 주세요.</div>
     
     <div class="qr-window">
-        <video id="camera-preview" autoplay playsinline muted></video>
+        <div id="reader"></div>
 
         <div class="corner top-left"></div>
         <div class="corner top-right"></div>
@@ -243,17 +249,16 @@
 </div>
 
 <div class="test-panel">
-    <input type="text" class="test-input" id="test-qr-data" placeholder="암호화된 문자열을 복사해 이곳에 입력하세요">
-    <div>
-        <button class="test-btn" onclick="triggerTestScan(true)">가상 인식 시도 (해독하기)</button>
-        <button class="test-btn" style="background-color: #7F1D1D;" onclick="triggerTestScan(false)">오류 티켓 강제 테스트</button>
+    <div class="input-row">
+        <input type="text" class="test-input" id="test-qr-data" placeholder="암호화된 문자열을 복사해 넣으세요">
+        <button class="action-btn" onclick="handleManualVerify()">검증</button>
     </div>
 </div>
 
 <div class="status-overlay" id="overlay">
     <div id="loading-view" style="display: flex; flex-direction: column; align-items: center;">
         <div class="spinner"></div>
-        <div class="status-title">안전한 채널을 통해 조회 중입니다...</div>
+        <div class="status-title">승차권 검증 중입니다...</div>
     </div>
 
     <div id="result-view" style="display: none; width: 100%; flex-direction: column; align-items: center;">
@@ -278,13 +283,17 @@
             </div>
         </div>
 
-        <button class="btn-confirm" onclick="resetScanner()">확인 (스캐너 복귀)</button>
+        <div class="auto-close-timer" id="timer-text">5초 후 스캐너로 복귀합니다...</div>
     </div>
 </div>
 
 <script>
     const SECRET_KEY = "KorailSecuritySystemKey2026";
     let audioCtx = null;
+    let html5QrcodeScanner = null;
+    let autoCloseTimeout = null;
+    let autoCloseInterval = null;
+    let isProcessing = false; // 중복 스캔 방지 플래그
 
     function initAudio() {
         if (!audioCtx) {
@@ -292,17 +301,51 @@
         }
     }
 
-    async function initCamera() {
-        const video = document.getElementById('camera-preview');
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" },
-                audio: false
-            });
-            video.srcObject = stream;
-        } catch (err) {
-            console.warn("카메라 장치 권한 없음 (로컬 테스트 환경)", err);
+    // 카메라 구동 및 즉시 QR 자동 인식 세팅
+    function startCameraScanner() {
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        const config = { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 } 
+        };
+
+        html5QrcodeScanner.start(
+            { facingMode: "environment" }, 
+            config,
+            onScanSuccess
+        ).catch(err => {
+            console.warn("카메라 장치를 시작할 수 없습니다. 수동 검증 창을 사용해 주세요.", err);
+        });
+    }
+
+    // 카메라에 QR코드가 잡혔을 때 버튼 클릭 없이 자동으로 즉시 실행되는 함수
+    function onScanSuccess(decodedText) {
+        if (isProcessing) return; // 이미 검증 화면이 떠 있는 동안 중복 처리 방지
+        isProcessing = true;
+        
+        // 카메라 잠시 중지 후 분석
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.pause(true);
         }
+        
+        processVerification(decodedText);
+    }
+
+    // 수동 복사 입력창에서 '검증' 버튼을 눌렀을 때 실행되는 함수
+    function handleManualVerify() {
+        const inputData = document.getElementById('test-qr-data').value.trim();
+        if (!inputData) {
+            alert("암호화된 문자열을 입력해 주세요.");
+            return;
+        }
+        if (isProcessing) return;
+        isProcessing = true;
+
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.pause(true);
+        }
+
+        processVerification(inputData);
     }
 
     function playBeep(frequency, duration) {
@@ -320,28 +363,25 @@
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         } catch (e) {
-            console.warn("오디오 출력 제한됨 (화면 미작동)", e);
+            console.warn("오디오 출력 제한됨", e);
         }
     }
 
+    // 정상 검증 비프음 (삑 - 단일음)
+    function playSuccessBeep() {
+        playBeep(980, 0.25);
+    }
+
+    // 비정상 검증 비프음 (삑삑삑 - 3단음)
     function playErrorBeep() {
         playBeep(450, 0.12);
-        setTimeout(() => playBeep(450, 0.12), 200);
-        setTimeout(() => playBeep(400, 0.25), 400);
+        setTimeout(() => playBeep(450, 0.12), 180);
+        setTimeout(() => playBeep(400, 0.25), 360);
     }
 
-    function triggerTestScan(isNormalMode) {
-        // 버튼 터치 즉시 오디오 제한 해제 시도
+    // 핵심 검증 프로세스 로직
+    function processVerification(encryptedInput) {
         try { initAudio(); if(audioCtx) audioCtx.resume(); } catch(e){}
-
-        const encryptedInput = document.getElementById('test-qr-data').value.trim();
-
-        if (isNormalMode && !encryptedInput) {
-            alert("ticket.html에서 노출된 암호화 텍스트(예: U2FsdGVk...)를 복사해 넣어주세요.");
-            return;
-        }
-
-        playBeep(980, 0.15);
 
         const overlay = document.getElementById('overlay');
         const loadingView = document.getElementById('loading-view');
@@ -351,52 +391,51 @@
         loadingView.style.display = 'flex';
         resultView.style.display = 'none';
 
-        // 3초 로딩 대기 시뮬레이션
+        // 3초 조회 로딩 시뮬레이션
         setTimeout(() => {
             loadingView.style.display = 'none';
             resultView.style.display = 'flex';
 
-            if (isNormalMode) {
-                try {
-                    // 복호화 시도
-                    const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
-                    const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
+            try {
+                // 복호화 시도
+                const decryptedBytes = CryptoJS.AES.decrypt(encryptedInput, SECRET_KEY);
+                const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
 
-                    if (!decryptedText) throw new Error("복호화 실패");
+                if (!decryptedText) throw new Error("복호화 실패");
 
-                    const [name, route, seat, timestamp] = decryptedText.split('|');
-                    
-                    const issuedTime = parseInt(timestamp);
-                    const now = Date.now();
-                    const diffSeconds = Math.floor((now - issuedTime) / 1000);
+                const [name, route, seat, timestamp] = decryptedText.split('|');
+                
+                const issuedTime = parseInt(timestamp);
+                const now = Date.now();
+                const diffSeconds = Math.floor((now - issuedTime) / 1000);
 
-                    // [정확히 30초 검증 적용]
-                    // (티켓이 새로 갱신되는 주기인 30초를 초과한 티켓이면 위조 처리)
-                    if (diffSeconds > 30 || diffSeconds < -30) {
-                        triggerErrorScreen("보안 시간 만료 (30초 초과)");
-                        return;
-                    }
-
-                    document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
-                    document.getElementById('result-title').style.color = "var(--success-green)";
-                    document.getElementById('res-name').innerText = name;
-                    document.getElementById('res-route').innerText = route;
-                    document.getElementById('res-seat').innerText = seat;
-                    document.getElementById('res-time').innerText = new Date(issuedTime).toLocaleString();
-
-                } catch (e) {
-                    triggerErrorScreen("위조되거나 변조된 잘못된 QR코드");
+                // 30초 검증 적용
+                if (diffSeconds > 30 || diffSeconds < -30) {
+                    showErrorResult("보안 시간 만료 (30초 초과)");
+                    return;
                 }
-            } else {
-                triggerErrorScreen("잘못된 승차권 정보");
+
+                // [검증 성공]
+                playSuccessBeep(); // 삑 소리 재생
+                document.getElementById('result-title').innerText = "✓ 정상 승차권입니다";
+                document.getElementById('result-title').style.color = "var(--success-green)";
+                document.getElementById('res-name').innerText = name;
+                document.getElementById('res-route').innerText = route;
+                document.getElementById('res-seat').innerText = seat;
+                document.getElementById('res-time').innerText = new Date(issuedTime).toLocaleString();
+
+            } catch (e) {
+                // [검증 실패 - 위조]
+                showErrorResult("위조되거나 변조된 잘못된 QR코드");
             }
-        }, 3000);
+
+            startAutoCloseTimer(); // 5초 카운트다운 시작
+        }, 1500); // 사용자 대기 시간 최적화를 위해 로딩을 1.5초로 세팅
     }
 
-    function triggerErrorScreen(errorMessage) {
-        playErrorBeep();
-
-        document.getElementById('result-title').innerText = "✗ 잘못된 QR코드입니다";
+    function showErrorResult(errorMessage) {
+        playErrorBeep(); // 삑삑삑 소리 재생
+        document.getElementById('result-title').innerText = "✗ 잘못된 승차권입니다";
         document.getElementById('result-title').style.color = "var(--error-red)";
         document.getElementById('res-name').innerText = "검증 불가";
         document.getElementById('res-route').innerText = errorMessage;
@@ -404,13 +443,40 @@
         document.getElementById('res-time').innerText = "기록 없음";
     }
 
+    // 5초 자동 닫기 기능 및 UI 연동
+    function startAutoCloseTimer() {
+        let remainingSeconds = 5;
+        document.getElementById('timer-text').innerText = `${remainingSeconds}초 후 스캐너로 복귀합니다...`;
+
+        autoCloseInterval = setInterval(() => {
+            remainingSeconds--;
+            document.getElementById('timer-text').innerText = `${remainingSeconds}초 후 스캐너로 복귀합니다...`;
+        }, 1000);
+
+        autoCloseTimeout = setTimeout(() => {
+            resetScanner();
+        }, 5000);
+    }
+
     function resetScanner() {
+        // 타이머 및 인터벌 클리어
+        clearTimeout(autoCloseTimeout);
+        clearInterval(autoCloseInterval);
+
+        // UI 초기화
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('test-qr-data').value = '';
+        
+        isProcessing = false;
+
+        // 카메라 인식 재개
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.resume();
+        }
     }
 
     window.onload = function() {
-        initCamera();
+        startCameraScanner();
     };
 </script>
 </body>
