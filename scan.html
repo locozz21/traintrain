@@ -383,7 +383,7 @@
             osc.type = "square"; 
             
             // 즉각적인 어택과 정밀한 소리 끊김을 구현해 명확한 띡 소리 구현
-            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.7, audioCtx.currentTime); 
             gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
             
             osc.start();
